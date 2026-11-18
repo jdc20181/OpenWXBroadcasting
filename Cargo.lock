@@ -5004,7 +5004,7 @@ dependencies = [
  "prost-build 0.13.5",
  "reqwest",
  "reqwest-middleware",
- "rstar 0.12.2",
+ "rstar 0.13.1",
  "serde",
  "serde_json",
  "smallvec",
