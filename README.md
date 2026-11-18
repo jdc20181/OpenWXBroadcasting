@@ -62,4 +62,6 @@ Details: [CONTRIBUTING.md](CONTRIBUTING.md). Installer: [installer/README.md](in
 | [docs/](docs/) | Design docs: backend, setup wizard, modularity, themes, licensing, repo hygiene |
 | [brand/](brand/BRAND.md) | Logo, icon and colours |
 
-Licence: being finalised before the public release ([docs/licensing.md](docs/licensing.md)).
+Licence: [OpenWX License 1.0](LICENSE). Free to use, change and share; anything you share keeps
+the same licence and its source. Closed commercial use needs a Commercial Waiver (a donation of
+US $500 or more). Third-party parts keep their own licences ([docs/licensing.md](docs/licensing.md)).

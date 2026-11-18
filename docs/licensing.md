@@ -2,10 +2,13 @@
 
 ## Licence for OpenWX itself
 
-Owner's decision. Options to weigh: a permissive licence (MIT/Apache-2.0: widest adoption,
-allows closed forks), a copyleft licence (GPL-3.0/AGPL-3.0: improvements stay open; AGPL also
-covers the relay when hosted), or source-available (keeps commercial control, not "open
-source" by definition). CrowdedWX Broadcaster stays proprietary either way.
+Decided 2026-11-18: the project's own **OpenWX License 1.0** (`LICENSE`). Anyone may use, adapt
+and redistribute; redistributed and network-hosted versions keep the same licence with source
+(share-alike); closed commercial use needs a Commercial Waiver, granted for a donation of US $500
+or more; third-party components keep their own licences; no warranty or liability. Because it
+limits commercial use it is "source-available", not OSI-approved "open source"; GitHub shows
+it as "Other". Have it reviewed by a lawyer before the public release. CrowdedWX Broadcaster
+stays proprietary.
 
 ## Inventory to clear before G5
 

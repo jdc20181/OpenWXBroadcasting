@@ -2,6 +2,7 @@
 name = "openwx-cli"
 version.workspace = true
 edition.workspace = true
+license-file.workspace = true
 authors.workspace = true
 description = "openwx: station setup, status checks and an MCP server so AI assistants (Claude and others) can read the weather and help run an OpenWX station"
 publish = false

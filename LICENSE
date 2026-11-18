@@ -1,0 +1,184 @@
+OpenWX License
+Version 1.0, November 2026
+
+Copyright (c) 2026 the OpenWX Broadcasting project maintainers
+(https://github.com/jdc20181/OpenWX-Broadcasting)
+
+-------------------------------------------------------------------------------
+In plain words (this summary is not the licence; the terms below are):
+
+  - Anyone may use OpenWX, free of charge.
+  - Anyone may change it, build on it and share it.
+  - Anything you share that is based on OpenWX keeps this same licence, with its
+    source code.
+  - Closed or proprietary commercial use needs a Commercial Waiver: a donation of
+    US $500 or more to the project grants one.
+  - Third-party parts (radar services, music, fonts, icons, libraries) keep their
+    own licences.
+  - There is no warranty, and the authors are not liable for what happens when you
+    use it. OpenWX is not an official warning source.
+-------------------------------------------------------------------------------
+
+1. DEFINITIONS
+
+"Licensor" means the copyright holder(s) of the Software, acting through the
+maintainers of the OpenWX Broadcasting project at the address above.
+
+"Software" means the source code, object code, documentation and other original
+works of authorship that the Licensor makes available under this Licence,
+including OpenWX Broadcasting, OpenWX Relay and the `openwx` tool. It does not
+include Third-Party Components.
+
+"Third-Party Components" means any work included with or used by the Software
+that is under a different licence or terms, including libraries, fonts, icons,
+music, map and boundary data, and online data services. Each is listed or
+identified in `docs/licensing.md`, its own folder, or its own licence file.
+
+"Derivative Work" means any work that is based on, modified from, or contains
+all or a substantial part of the Software.
+
+"Distribute" means to give, sell, publish or otherwise make a copy of the
+Software or a Derivative Work available to anyone else. Letting people use a
+Derivative Work over a network (for example, as a hosted service or a hosted
+relay) also counts as Distributing it.
+
+"You" means the person or legal entity exercising rights under this Licence.
+
+"Commercial Use" means using the Software or a Derivative Work for monetary
+compensation or commercial advantage, including selling it, selling access to
+it, licensing it, bundling it with a paid product or service, or offering it as
+a paid hosted service. Running the Software to produce your own weather
+coverage, including coverage that carries advertising or sponsorship, is not by
+itself Commercial Use of the Software.
+
+"Closed Commercial Use" means Commercial Use in which the Software or a
+Derivative Work is not made available under this Licence with its complete
+Source Code to everyone who receives or uses it.
+
+"Source Code" means the preferred form of a work for making changes to it,
+including the build scripts needed to produce a working program.
+
+2. GRANT OF RIGHTS
+
+Subject to the terms of this Licence, the Licensor grants You a worldwide,
+royalty-free, non-exclusive licence to:
+
+  (a) use and run the Software for any purpose except Closed Commercial Use
+      without a Commercial Waiver (section 4);
+  (b) copy, modify and adapt the Software and create Derivative Works; and
+  (c) Distribute the Software and Derivative Works under the conditions in
+      section 3.
+
+3. CONDITIONS FOR DISTRIBUTION (SHARE-ALIKE)
+
+If You Distribute the Software or a Derivative Work, You must:
+
+  (a) license it to recipients under this Licence, and no other terms that
+      restrict the rights this Licence gives them;
+  (b) include a copy of this Licence and keep intact all copyright, licence and
+      attribution notices;
+  (c) make its complete Source Code available to every recipient or user, at no
+      more than the cost of providing it, for as long as You Distribute it;
+  (d) state clearly that You changed the Software, if You did, and give the date
+      of the change; and
+  (e) not imply that the Licensor or the OpenWX Broadcasting project endorses You
+      or Your work.
+
+4. COMMERCIAL USE AND THE COMMERCIAL WAIVER
+
+  (a) Closed Commercial Use is not permitted without a Commercial Waiver.
+
+  (b) A Commercial Waiver is granted to an individual or legal entity that makes a
+      single donation of US $500 or more to the OpenWX Broadcasting project
+      through a donation channel the Licensor lists in the project repository,
+      and receives written confirmation (including by e-mail or a published
+      sponsor listing) from the Licensor.
+
+  (c) A Commercial Waiver lets the holder use, modify and Distribute the Software
+      and its Derivative Works for Closed Commercial Use, without the conditions
+      in section 3(a) and 3(c). Sections 3(b), 3(e), 5, 6, 7 and 8 still apply.
+
+  (d) A Commercial Waiver is perpetual for every version of the Software
+      released before or within one year after the date of the donation. It
+      applies to the donor and to entities it controls. It may not be
+      sold, sublicensed or transferred, except with the sale of the whole business
+      that holds it.
+
+  (e) The Licensor may set a different donation amount for versions released
+      after a future change to this Licence. Waivers already granted are not
+      affected.
+
+  (f) Commercial Use that fully meets section 3, with the complete Source Code
+      shared under this Licence, does not need a Commercial Waiver.
+
+5. THIRD-PARTY COMPONENTS
+
+This Licence covers only the Licensor's own work. Third-Party Components keep
+their own licences and terms (for example, LibreWXR's public radar API is for
+personal and trial use, and self-hosted LibreWXR has its own licence; CC0 music
+remains CC0; fonts and icons keep their own licences). You are responsible for
+following those terms, including any data-service terms of use, for Your use
+of the Software.
+
+6. TRADEMARKS
+
+This Licence does not grant permission to use the names "OpenWX" or "OpenWX
+Broadcasting", or the project's logos, except as needed to describe where Your
+work came from and to keep the notices required by section 3(b). A Derivative
+Work that is Distributed must use a different name and logo unless the Licensor
+agrees otherwise in writing.
+
+7. CONTRIBUTIONS
+
+Unless You state otherwise in writing before it is accepted, any contribution
+You submit to the OpenWX Broadcasting project is licensed under this Licence,
+and You also grant the Licensor a perpetual, irrevocable, worldwide,
+royalty-free licence to include Your contribution in the Software and to grant
+Commercial Waivers covering it. You confirm that You have the right to make
+the contribution.
+
+8. PATENTS
+
+Each contributor grants You a perpetual, worldwide, royalty-free licence under
+any patent claims they can license that are necessarily infringed by their
+contribution, to make, use and Distribute the Software as allowed by this
+Licence. If You start patent litigation claiming that the Software infringes a
+patent, the patent licences granted to You under this Licence end on the date
+that litigation is filed.
+
+9. TERMINATION
+
+If You break this Licence, Your rights under it end automatically. They are
+restored if You fix the breach within 30 days of learning of it, unless the
+Licensor has notified You of the same kind of breach before. Recipients who
+received the Software from You under this Licence keep their rights as long as
+they comply.
+
+10. NO WARRANTY
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE, ACCURACY AND NON-INFRINGEMENT. WEATHER INFORMATION
+SHOWN OR PRODUCED BY THE SOFTWARE MAY BE LATE, INCOMPLETE OR WRONG. THE SOFTWARE
+IS NOT AN OFFICIAL WARNING SOURCE AND MUST NOT BE RELIED ON FOR LIFE-SAFETY
+DECISIONS; FOLLOW THE NATIONAL WEATHER SERVICE AND LOCAL EMERGENCY MANAGEMENT.
+
+11. LIMITATION OF LIABILITY
+
+TO THE FULLEST EXTENT PERMITTED BY LAW, IN NO EVENT SHALL THE LICENSOR OR ANY
+CONTRIBUTOR BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN
+CONTRACT, TORT OR OTHERWISE, INCLUDING DIRECT, INDIRECT, INCIDENTAL, SPECIAL OR
+CONSEQUENTIAL DAMAGES, LOSS OF DATA, LOSS OF PROFITS OR BUSINESS INTERRUPTION,
+ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR ITS USE, EVEN IF
+ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+12. GENERAL
+
+  (a) If any part of this Licence cannot be enforced, the rest still applies,
+      and that part is changed only as much as needed to make it enforceable.
+  (b) The Licensor may publish new versions of this Licence. You may use the
+      Software under the version it was released with or, at Your choice, any
+      later version.
+  (c) Not enforcing a term is not a waiver of it.
+  (d) This Licence is the whole agreement about the Software between You and the
+      Licensor, except for a Commercial Waiver, which adds to it.

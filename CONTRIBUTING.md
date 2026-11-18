@@ -98,6 +98,8 @@ read and test it, make sure it follows the rules above, and don't paste code you
 
 ## Licence
 
-The project licence is being finalised before the first public release (`docs/licensing.md`).
-By contributing you agree that your contribution may be released under the licence the project
-adopts. If that's a problem for you, say so in your PR.
+OpenWX is under the [OpenWX License 1.0](LICENSE). By contributing you license your work under it,
+and you let the maintainers include it in Commercial Waivers (section 7 of the licence); waiver
+donations fund the project. If that's a problem for you, say so in your PR before it's merged.
+Only add third-party code or assets whose licence allows redistribution, and record them in
+`docs/licensing.md`.

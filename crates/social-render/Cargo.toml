@@ -2,6 +2,7 @@
 name = "openwx-social-render"
 version = "0.1.0"
 edition = "2021"
+license-file = "../../LICENSE"
 description = "Draws social graphics (alert cards, forecast posts). Library + JSON-in/PNG-out program."
 publish = false
 

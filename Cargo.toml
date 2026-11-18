@@ -13,6 +13,7 @@ exclude = ["vendor"]
 default-members = ["app", "relay", "cli"]
 
 [workspace.package]
+license-file = "LICENSE"
 version = "0.1.0"
 edition = "2021"
 authors = ["OpenWX Broadcasting contributors"]

@@ -2,9 +2,9 @@
 name = "openwx-broadcaster"
 version = "0.1.0"
 edition = "2021"
+license-file = "../LICENSE"
 description = "OpenWX Broadcasting - broadcast weather radar, graphics and presentation studio for community weather stations"
 authors = ["OpenWX Broadcasting contributors"]
-# Licence: the owner's decision before public release (docs/licensing.md).
 publish = false
 default-run = "openwx-broadcaster"
 build = "build.rs"

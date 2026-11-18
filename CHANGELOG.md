@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+## v0.1.0 build 2 · November 18, 2026 · test build
+
+### Fixed
+
+- The title bar wordmark read "CROWDEDWX BROADCASTER"; it now reads "OPENWX BROADCASTING". The
+  built-in fallback logo, the map watermark and the default MOS ID are OpenWX too.
+
+### New
+
+- **Radar server setting** (Settings > Weather, "On this PC" backend). Radar composites come
+  from LibreWXR: its free public API is for personal and trial use, and stations that run their
+  own LibreWXR server can enter its address. Blank uses the public API.
+- **Licence: OpenWX License 1.0** (`LICENSE`). Free to use, change and share under the same
+  licence; closed commercial use needs a Commercial Waiver (a donation of US $500 or more).
+
 ## v0.1.0 build 1 · November 17, 2026 · first test build
 
 The first OpenWX Broadcasting build, forked from CrowdedWX Broadcaster v0.1.9 (build 111620261)

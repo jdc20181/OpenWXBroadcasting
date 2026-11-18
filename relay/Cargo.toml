@@ -2,6 +2,7 @@
 name = "openwx-relay"
 version.workspace = true
 edition.workspace = true
+license-file.workspace = true
 authors.workspace = true
 description = "OpenWX Relay: the small backend between OpenWX Broadcasting and public weather data (NWS, NOAA, SPC, USGS, IEM and others)"
 publish = false

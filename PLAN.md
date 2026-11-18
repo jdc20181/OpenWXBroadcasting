@@ -24,7 +24,7 @@ test build (v0.1.0 build 1):
 | Own update-signing key | Tooling done (`openwx-release keygen`); owner generates and keeps the key |
 | Decoupling: remaining Dubois/DCWeather mentions in samples/tests, site features behind `site_integration` | Partly (UI and defaults done; samples and tests still name real places) |
 | Posting dashboard, GitHub bug reports, four app themes | Not started |
-| Licence choice, Open-Meteo removal, LibreWXR terms | Owner decisions (G5) |
+| Licence: OpenWX License 1.0 (`LICENSE`); radar server setting for LibreWXR | Done (licence needs legal review); Open-Meteo removal still open |
 
 ## What OpenWX ships with (owner's scope, 2026-11-16)
 
