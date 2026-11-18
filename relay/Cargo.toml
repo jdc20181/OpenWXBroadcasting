@@ -1,0 +1,33 @@
+[package]
+name = "openwx-relay"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+description = "OpenWX Relay: the small backend between OpenWX Broadcasting and public weather data (NWS, NOAA, SPC, USGS, IEM and others)"
+publish = false
+
+[lib]
+name = "openwx_relay"
+path = "src/lib.rs"
+
+[[bin]]
+name = "openwx-relay"
+path = "src/main.rs"
+
+[dependencies]
+axum = { version = "0.8", default-features = false, features = ["tokio", "http1", "query", "json"] }
+tower = { version = "0.5", features = ["util"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time", "sync", "signal"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "gzip", "stream"] }
+futures-util = "0.3"
+bytes = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "1"
+chrono = { version = "0.4", features = ["clock"] }
+anyhow = "1"
+log = "0.4"
+env_logger = "0.11"
+dirs = "6"
+url = "2"
+regex = "1"

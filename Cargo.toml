@@ -1,0 +1,30 @@
+# OpenWX Broadcasting workspace.
+#
+#   app/                   the desktop studio (openwx-broadcaster)
+#   relay/                 OpenWX Relay: the small Rust backend (library + openwx-relay server)
+#   cli/                   `openwx`: setup tool, status checks and the MCP server for AI assistants
+#   crates/social-render   social graphics renderer (alert cards, forecast posts)
+#   vendor/maplibre-rs     vendored map engine (its own upstream workspace, kept out of ours)
+
+[workspace]
+resolver = "2"
+members = ["app", "relay", "cli", "crates/social-render"]
+exclude = ["vendor"]
+default-members = ["app", "relay", "cli"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["OpenWX Broadcasting contributors"]
+repository = "https://github.com/jdc20181/OpenWX-Broadcasting"
+
+[profile.dev]
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 3
+
+[profile.release]
+lto = "thin"
+codegen-units = 4
+strip = true

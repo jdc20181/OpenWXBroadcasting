@@ -1,0 +1,5 @@
+[toolchain]
+# CrowdedWXBroadcaster: upstream pins 1.97.1 as its tested minimum (see `rust-version` in Cargo.toml,
+# which still enforces it). We build on latest stable so the app and maplibre-rs share one toolchain
+# and one build cache.
+channel = "stable"

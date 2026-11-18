@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "openwx": {
+      "command": "openwx",
+      "args": ["mcp"]
+    }
+  }
+}

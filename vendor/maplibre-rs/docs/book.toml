@@ -1,0 +1,8 @@
+[book]
+authors = ["Maximilian Ammann"]
+language = "en"
+src = "src"
+title = "MapLibre Rust Documentation"
+
+[output.html]
+additional-css = ["diff.css"]

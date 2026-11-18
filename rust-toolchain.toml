@@ -1,0 +1,4 @@
+[toolchain]
+# Project rule: build on the latest stable Rust (run `rustup update stable` to move forward).
+# The app and the vendored maplibre-rs share this toolchain and one target/ folder.
+channel = "stable"

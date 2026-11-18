@@ -1,0 +1,117 @@
+[package]
+name = "openwx-broadcaster"
+version = "0.1.0"
+edition = "2021"
+description = "OpenWX Broadcasting - broadcast weather radar, graphics and presentation studio for community weather stations"
+authors = ["OpenWX Broadcasting contributors"]
+# Licence: the owner's decision before public release (docs/licensing.md).
+publish = false
+default-run = "openwx-broadcaster"
+build = "build.rs"
+
+[[bin]]
+name = "openwx-broadcaster"
+path = "src/main.rs"
+
+# Release helper: signs installers for the updater and writes latest.json.
+[[bin]]
+name = "openwx-release"
+path = "src/bin/release.rs"
+
+[dependencies]
+# The on-device backend (OpenWX Relay), started inside the app in Local mode.
+openwx-relay = { path = "../relay" }
+
+# UI: GPUI + GPUI Kit components
+gpui-kit = "0.9.0"
+
+# Map: maplibre-rs (vendored, with additions - see vendor/maplibre-rs/CROWDEDWX-CHANGES.md)
+maplibre = { path = "../vendor/maplibre-rs/maplibre", default-features = false, features = ["raster", "headless", "thread-safe-futures"] }
+
+# Runtime + networking
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync", "fs"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "gzip", "stream", "multipart"] }
+futures-util = "0.3"
+
+# Data
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+chrono = { version = "0.4", features = ["serde", "clock"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+anyhow = "1"
+log = "0.4"
+env_logger = "0.11"
+dirs = "6"
+semver = "1"
+
+# Graphics, export and recording
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp", "gif", "bmp"] }
+tiny-skia = "0.11"
+fontdue = "0.9"
+ttf-parser = "0.25"
+gif = "0.13"
+openh264 = "0.9"
+mp4 = "0.14"
+bytes = "1"
+
+# Updates
+sha2 = "0.10"
+minisign-verify = "0.2"
+minisign = "0.7"
+base64 = "0.22"
+
+# OS integration
+rfd = "0.15"
+open = "5"
+tokio-tungstenite = "0.30.0"
+flate2 = "1.1"
+geo = "0.33"
+rodio = "0.23"
+# Weather file decoding (GRIB2, NetCDF3/4, HDF5).
+grib = { version = "0.20", default-features = false, features = ["jpeg2000-unpack-with-hayro", "png-unpack-with-png-crate", "ccsds-unpack-with-rust-aec"] }
+netcdf-reader = "0.12"
+hdf5-reader = "0.12"
+zip = { version = "9.4.1", default-features = false, features = ["deflate"] }
+memory-stats = "1.2.0"
+# MIDI pads / keyboards as control surfaces
+midir = "0.11.1"
+# SVG import (rasterised into the media library)
+resvg = "0.49.0"
+# Social graphics (alert cards, forecast posts).
+social-render = { package = "openwx-social-render", path = "../crates/social-render" }
+
+# Windows' built-in AAC encoder (Media Foundation) puts music into exported MP4s without ffmpeg.
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.62.2", features = ["Win32_Foundation", "Win32_System_Com", "Win32_Media_MediaFoundation", "Win32_System_Threading", "Win32_Graphics_Gdi", "Win32_Graphics_Dwm", "Win32_UI_WindowsAndMessaging", "Win32_Security_Credentials"] }
+
+[build-dependencies]
+winresource = "0.1"
+
+# Installer packaging (cargo install cargo-packager --locked; then `cargo packager --release -p openwx-broadcaster`).
+[package.metadata.packager]
+product-name = "OpenWX Broadcasting"
+identifier = "org.openwx.broadcaster"
+publisher = "OpenWX Broadcasting contributors"
+category = "Video"
+formats = ["nsis"]
+before-packaging-command = "cargo build --locked --release -p openwx-broadcaster -p openwx-relay -p openwx-cli"
+out-dir = "../dist"
+icons = ["../brand/openwx.ico", "../brand/png/openwx-icon-1024.png"]
+binaries = [
+  { path = "openwx-broadcaster", main = true },
+  { path = "openwx-relay", main = false },
+  { path = "openwx", main = false },
+]
+resources = [{ src = "assets/music/abstraction", target = "assets/music/abstraction" }]
+
+[package.metadata.packager.macos]
+minimum-system-version = "11.0"
+
+[package.metadata.packager.deb]
+depends = ["libxkbcommon0", "libwayland-client0", "libvulkan1", "speech-dispatcher", "libnotify-bin"]
+
+[package.metadata.packager.appimage]
+
+[package.metadata.packager.nsis]
+# Per-user install: no admin prompt. Your library (Documents\OpenWX) is never removed.
+installer-mode = "currentUser"

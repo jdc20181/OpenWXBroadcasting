@@ -1,0 +1,109 @@
+# OpenWX Broadcasting: the public repo holds source, docs and cleared assets only.
+# Check before every push:  git status --ignored   (docs/repo-hygiene.md)
+
+# ---- Build output (Rust, packaging) ----
+/target/
+/target-*/
+**/target/
+/dist/
+/installer/out/
+/release/
+*.pdb
+*.rlib
+*.rmeta
+*.orig
+*.rej
+
+# ---- Installers and release artefacts (they go to GitHub Releases) ----
+*.exe
+*.msi
+*.msix
+*.appx
+*.dmg
+*.AppImage
+*.deb
+*.rpm
+*.nsis
+*.7z
+*.zip
+*.tar.gz
+*.sha256
+*.sig
+*.minisig
+latest*.json
+
+# ---- Music: the CC0 loop bundle is downloaded (see app/assets/music/README.md), not committed ----
+/app/assets/music/abstraction/*
+!/app/assets/music/abstraction/catalog.json
+!/app/assets/music/abstraction/LICENSE.txt
+# The five starter beds (CC0, Git LFS via .gitattributes) are the only committed tracks.
+/app/assets/music/*.ogg
+/app/assets/music/*.wav
+/app/assets/music/*.flac
+
+# ---- Runtime data, caches, logs (never in the tree) ----
+*.log
+logs/
+cache/
+tiles/
+history-cache/
+bug-reports/
+last-good-data.json
+session.json
+warning-status.json
+climate-normals.json
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# ---- QA renders, screenshots, audits (commit the scripts, not their output) ----
+qa-local/
+**/qa/out/
+contact-sheets/
+screenshots/
+audit-output/
+*.contact.png
+
+# ---- Personal settings, keys and secrets ----
+settings.json
+settings.*.json
+relay.toml
+!relay.example.toml
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.pfx
+*.p12
+*.crt
+*.token
+secrets/
+credentials*
+.mcp.json
+
+# ---- Node / Python helpers ----
+node_modules/
+npm-debug.log*
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# ---- Editors and OS ----
+.vs/
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.swp
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ---- Assistant and agent scratch (CLAUDE.md and prompts/ ARE committed) ----
+.claude/
+claude-tmp/
+.codex/

@@ -1,0 +1,40 @@
+name: Bug report
+description: Something in OpenWX Broadcasting, OpenWX Relay or the openwx tool is not working
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. **Security problems go through SECURITY.md, not here.**
+        Please remove anything private (access tokens, page IDs, e-mail addresses) from logs and screenshots.
+  - type: dropdown
+    id: part
+    attributes:
+      label: Which part?
+      options: ["Desktop app", "OpenWX Relay (server)", "openwx CLI / MCP server", "Installer or updater", "Docs"]
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Settings > About, or openwx-relay --version
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: "1. Open Map Studio\n2. ..."
+  - type: textarea
+    id: logs
+    attributes:
+      label: Log or screenshots
+      description: Settings > About shows the log folder.
+      render: text

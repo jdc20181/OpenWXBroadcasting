@@ -1,0 +1,37 @@
+# Builds the Linux OpenWX Relay downloads that server/install.sh installs:
+#   openwx-relay-linux-x86_64.tar.gz (+ .sha256), openwx-relay-linux-aarch64.tar.gz (+ .sha256)
+# Runs when a release is published; the Windows installer is attached by the maintainer.
+name: Release relay
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-latest
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo build --release --locked -p openwx-relay
+      - name: Package
+        run: |
+          name=openwx-relay-linux-${{ matrix.arch }}.tar.gz
+          tar -czf "$name" -C target/release openwx-relay
+          sha256sum "$name" > "$name.sha256"
+      - name: Attach to the release
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ github.event.release.tag_name }}" openwx-relay-linux-${{ matrix.arch }}.tar.gz openwx-relay-linux-${{ matrix.arch }}.tar.gz.sha256 --clobber

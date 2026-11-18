@@ -1,0 +1,22 @@
+# OpenWX Relay with Docker Compose.
+#   1. docker compose build
+#   2. docker compose run --rm relay setup      (choose "A shared server"; writes ./config/relay.toml)
+#   3. docker compose up -d
+# Put HTTPS in front (Caddy or your existing proxy) and give studio PCs
+#   https://your-domain/t/<access_token>
+services:
+  relay:
+    build:
+      context: ..
+      dockerfile: server/Dockerfile
+    image: openwx-relay
+    restart: unless-stopped
+    volumes:
+      - ./config:/etc/openwx
+    # Published on this host only; your HTTPS proxy forwards to it.
+    ports:
+      - "127.0.0.1:8737:8737"
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]

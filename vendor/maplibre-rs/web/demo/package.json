@@ -1,0 +1,30 @@
+{
+  "name": "demo",
+  "version": "0.0.1",
+  "description": "A maplibre demo",
+  "private": true,
+  "scripts": {
+    "clean": "rm -rf dist",
+    "start": "vite",
+    "build": "npm run clean && vite build",
+    "build-production": "npm run clean && vite build --mode production"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/maplibre/maplibre-rs"
+  },
+  "dependencies": {
+    "maplibre-rs": "file:../lib"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.4",
+    "vite": "8.0.0-beta.15"
+  },
+  "keywords": [
+    "wasm",
+    "webgpu",
+    "maps"
+  ],
+  "author": "",
+  "license": "MIT"
+}

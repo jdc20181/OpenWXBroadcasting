@@ -1,0 +1,22 @@
+include "basic.fbs";
+
+struct FlatShaderVertex {
+    position: [float:2];
+    normal: [float:2];
+}
+
+table FlatLayerTessellated {
+    coords: FlatWorldTileCoords;
+    layer_name: string;
+    vertices: [FlatShaderVertex];
+    indices: [uint];
+    usable_indices: uint;
+    // Holds for each feature the count of indices.
+    feature_indices: [uint];
+    // The style layer id (may differ from layer_name which is the MVT source layer name).
+    style_layer_id: string;
+    // Per-feature RGBA colors (4 floats per feature, flattened).
+    feature_colors: [float];
+}
+
+root_type FlatLayerTessellated;
