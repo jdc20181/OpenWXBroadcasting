@@ -270,8 +270,7 @@ pub struct Settings {
     pub relay_port: u16,
     /// Station contact sent to NOAA/NWS in every request (their terms ask for one).
     pub contact: String,
-    /// Radar composite server (LibreWXR). The public API is for personal and trial use;
-    /// a self-hosted LibreWXR address can go here instead.
+    /// Radar composite server (LibreWXR): the public API, or a self-hosted LibreWXR address.
     pub radar_upstream: String,
     /// Optional site-specific features (a website's own studio API, sponsors, posting through a
     /// website). Off in the community edition; plug-ins turn it on.

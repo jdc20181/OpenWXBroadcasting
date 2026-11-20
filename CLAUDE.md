@@ -31,5 +31,6 @@ Rust workspace: `app/` (GPUI desktop studio), `relay/` (OpenWX Relay backend: li
 | Settings | `app/src/config.rs`; Settings UI `app/src/ui/settings.rs` |
 | First-run wizard | `app/src/ui/setup_wizard.rs`; CLI wizard `cli/src/setup.rs` |
 | Graphics templates | `app/src/gfx/templates*.rs`, `app/src/gfx/sets/` |
+| Bringing new graphics over from CrowdedWX | `docs/crowdedwx-sync.md`, `tools/sync-crowdedwx.py` |
 | Map layers | `app/src/map/` |
 | MCP tools and prompts | `cli/src/mcp.rs`; prompt library `prompts/` |

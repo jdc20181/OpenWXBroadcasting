@@ -107,3 +107,6 @@ desktop.ini
 .claude/
 claude-tmp/
 .codex/
+
+# CrowdedWX sync state (tools/sync-crowdedwx.py)
+/.sync/

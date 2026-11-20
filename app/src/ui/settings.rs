@@ -1356,7 +1356,7 @@ impl Render for SettingsView {
                     .when(d.backend_mode == "remote", |g| g.child(self.field(6)))
                     .child(self.field(TEXT_FIELDS - 1))
                     .when(d.backend_mode == "local", |g| g
-                        .child(muted("Radar comes from LibreWXR. Its free public API is for personal and trial use; if you run your own LibreWXR server, put its address here."))
+                        .child(muted("Radar comes from LibreWXR (github.com/JoshuaKimsey/LibreWXR). Leave this blank for its public API, or enter your own LibreWXR server. Check LibreWXR's terms for your use."))
                         .child(self.field(TEXT_FIELDS - 2)))
                     .child(row().gap(px(8.)).child(button_small("run-setup", "Run setup again").on_click(cx.listener(|this, _, _, cx| {
                         this.app.update(cx, |s, cx| {

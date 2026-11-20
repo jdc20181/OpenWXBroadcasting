@@ -1,0 +1,24 @@
+# What `tools/sync-crowdedwx.py` brings over from CrowdedWX Broadcaster.
+# Paths are relative to each project's root.
+
+# Name changes applied to every incoming file, in this order (the same ones the fork used).
+renames = [
+  ["CrowdedWXBroadcaster", "OpenWXBroadcasting"],
+  ["crowdedwx-broadcaster", "openwx-broadcaster"],
+  ["cwx-release", "openwx-release"],
+  ["CrowdedWX", "OpenWX"],
+]
+
+# Station-specific words. Incoming lines that contain one are listed in the report for a person
+# to make neutral (a setting, a wizard answer or a sample value).
+station_terms = ["Dubois", "Jasper", "Huntingburg", "DCWeather", "dcweather.xyz", "INDOT", "CROWDED"]
+
+# Files OpenWX keeps as its own (paths inside a synced folder, e.g. "render.rs"). They are never
+# overwritten; upstream changes to them are only reported.
+keep = []
+
+# CrowdedWX folder -> OpenWX folder. Only the listed file types are synced.
+[[folders]]
+from = "src/gfx"
+to = "app/src/gfx"
+types = [".rs", ".json", ".svg"]

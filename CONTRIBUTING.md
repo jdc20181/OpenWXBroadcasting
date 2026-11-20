@@ -30,6 +30,7 @@ through [SECURITY.md](SECURITY.md), never a public issue.
 | `prompts/` | Prompt library for Claude and other assistants |
 | `brand/` | Logo, icon and their sources |
 | `docs/` | Design docs: backend, setup wizard, modularity, themes, licensing |
+| `tools/` | Maintainer scripts (`sync-crowdedwx.py`: bring graphics over from CrowdedWX) |
 
 ## Building
 

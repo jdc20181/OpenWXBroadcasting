@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 pub const DEFAULT_PORT: u16 = 8737;
-/// The public LibreWXR API: free for personal and trial use. Self-hosted LibreWXR has no such limit.
+/// The public LibreWXR API. Stations can point `radar_upstream` at their own LibreWXR server.
 pub const DEFAULT_RADAR_UPSTREAM: &str = "https://api.librewxr.net";
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]

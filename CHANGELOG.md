@@ -12,8 +12,7 @@
 ### New
 
 - **Radar server setting** (Settings > Weather, "On this PC" backend). Radar composites come
-  from LibreWXR: its free public API is for personal and trial use, and stations that run their
-  own LibreWXR server can enter its address. Blank uses the public API.
+  from LibreWXR; leave it blank for the public API or enter your own LibreWXR server.
 - **Licence: OpenWX License 1.0** (`LICENSE`). Free to use, change and share under the same
   licence; closed commercial use needs a Commercial Waiver (a donation of US $500 or more).
 
