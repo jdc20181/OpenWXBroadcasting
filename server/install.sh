@@ -107,7 +107,7 @@ get_binary() {
     if [ "$VERSION" = latest ]; then base="https://github.com/$REPO/releases/latest/download"
     else base="https://github.com/$REPO/releases/download/$VERSION"; fi
     step "Downloading $name"
-    fetch "$base/$name" "$tmp/$name" || die "download failed. Check the internet connection, or use --binary / --from-source."
+    fetch "$base/$name" "$tmp/$name" || die "no Linux download for this release (or no internet). Build it here with --from-source, or copy one in with --binary."
     fetch "$base/$name.sha256" "$tmp/$name.sha256" || die "the checksum file is missing from the release; refusing to install an unverified download"
     (cd "$tmp" && sha256sum -c "$name.sha256" >/dev/null) || die "checksum mismatch: the download is damaged or was altered"
     ok "checksum verified"

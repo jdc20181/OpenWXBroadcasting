@@ -21,5 +21,5 @@ starting point; it is checked **before the first commit**.
 
 ## Ongoing
 
-- CI fails a pull request that adds an ignored-type file or a file over the size limit.
+- Before committing, check `git status` for ignored-type files or anything over the size limit.
 - Release artefacts (installers, `.ico` builds) go to GitHub Releases, not the tree.

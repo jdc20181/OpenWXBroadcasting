@@ -19,7 +19,7 @@ test build (v0.1.0 build 1):
 | First-run setup wizard (station, contact, state, counties, main city, backend, feed check) | Done (G4 walkthrough pending) |
 | `openwx` CLI: setup, status, weather, alerts; MCP server + prompts for Claude | Done |
 | `server/install.sh` (install/update/rollback/uninstall), Dockerfile, compose | Done (needs a release with Linux builds) |
-| SECURITY, CONTRIBUTING, CODE_OF_CONDUCT, SUPPORT, CLAUDE.md, issue/PR templates, CI | Done |
+| SECURITY, CONTRIBUTING, CODE_OF_CONDUCT, SUPPORT, CLAUDE.md, issue/PR templates | Done (no GitHub Actions or Dependabot: builds and tests run locally) |
 | Tight `.gitignore` + `.gitattributes` (LFS for the CC0 music) | Done; review `git status --ignored` before the first commit |
 | Own update-signing key | Tooling done (`openwx-release keygen`); owner generates and keeps the key |
 | Decoupling: remaining Dubois/DCWeather mentions in samples/tests, site features behind `site_integration` | Partly (UI and defaults done; samples and tests still name real places) |

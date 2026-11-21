@@ -10,6 +10,10 @@ fn sample(doc: &mut GraphicDoc) {
     show_ident::sample(doc);
     show_schedule::sample(doc);
     sponsor_cards::sample(doc);
+    multi_day_forecast_cards::sample(doc);
+    season_countdown_cards::sample(doc);
+    forecast_editor_cards::sample(doc);
+    viewer_cards::sample(doc);
 
     social_forecast::sample(doc);
     holiday_forecast::sample(doc);
@@ -410,6 +414,12 @@ fn qa_reference_graphics() {
                         "set.history.credit".into(),
                         "SAMPLE IMAGE • Synthetic layout fixture".into(),
                     ));
+                 } else if info.key.starts_with("set_season_countdown__") {
+                    doc.data_overrides.extend([
+                        ("set.season.next".into(), "Season date unavailable".into()),
+                        ("set.season.days".into(), "Unavailable".into()),
+                        ("set.season.sample_note".into(), "".into()),
+                    ]);
                 } else if info.key.starts_with("set_cold_criteria_compare") {
                     let mut scene = board::empty(board::Layout::Compare);
                     scene.scope = comparison::scope(&settings, board::Layout::Zones);

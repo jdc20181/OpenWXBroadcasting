@@ -148,9 +148,21 @@ pub fn build_in(key: &str, look: &str) -> Option<GraphicDoc> {
     Some(doc)
 }
 
-/// Every template: the built-in ones, then the catalog sets (`gfx::sets`).
+/// Template families kept out of the catalog: they still build by key (saved workspaces and
+/// shows keep working) but aren't offered. The plain "holiday forecast" set duplicated the
+/// designed holiday cards (`holiday_*`, Holidays category) as undesigned panels and crowded
+/// them out of searches.
+const HIDDEN_FROM_CATALOG: &[&str] = &["set_holiday_forecast__"];
+
+/// Whether a template is offered in the catalog.
+pub fn in_catalog(key: &str) -> bool {
+    !HIDDEN_FROM_CATALOG.iter().any(|prefix| key.starts_with(prefix))
+}
+
+/// Every template offered in the catalog: the built-in ones, then the catalog sets (`gfx::sets`).
 pub fn all() -> impl Iterator<Item = &'static TemplateInfo> {
     TEMPLATES.iter().chain(TEMPLATES_EXT.iter()).chain(crate::gfx::sets::TEMPLATES.iter()).chain(crate::gfx::history_set::TEMPLATES.iter()).chain(crate::gfx::explain_set::TEMPLATES.iter())
+        .filter(|t| in_catalog(t.key))
 }
 
 /// Every template's categories in display order (landing page).

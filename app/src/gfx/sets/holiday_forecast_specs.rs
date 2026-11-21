@@ -80,4 +80,104 @@ const SPECS: &[Spec] = &[
         holiday: Holiday::NewYearsEve,
         format: 2,
     },
+    Spec {
+        key: "set_holiday_forecast__mlk_portrait",
+        holiday: Holiday::Mlk,
+        format: 1,
+    },
+    Spec {
+        key: "set_holiday_forecast__mlk_square",
+        holiday: Holiday::Mlk,
+        format: 2,
+    },
+    Spec {
+        key: "set_holiday_forecast__valentines_portrait",
+        holiday: Holiday::Valentines,
+        format: 1,
+    },
+    Spec {
+        key: "set_holiday_forecast__valentines_square",
+        holiday: Holiday::Valentines,
+        format: 2,
+    },
+    Spec {
+        key: "set_holiday_forecast__presidents_portrait",
+        holiday: Holiday::Presidents,
+        format: 1,
+    },
+    Spec {
+        key: "set_holiday_forecast__presidents_square",
+        holiday: Holiday::Presidents,
+        format: 2,
+    },
+    Spec {
+        key: "set_holiday_forecast__st_patricks_portrait",
+        holiday: Holiday::StPatricks,
+        format: 1,
+    },
+    Spec {
+        key: "set_holiday_forecast__st_patricks_square",
+        holiday: Holiday::StPatricks,
+        format: 2,
+    },
+    Spec {
+        key: "set_holiday_forecast__juneteenth_portrait",
+        holiday: Holiday::Juneteenth,
+        format: 1,
+    },
+    Spec {
+        key: "set_holiday_forecast__juneteenth_square",
+        holiday: Holiday::Juneteenth,
+        format: 2,
+    },
+    Spec {
+        key: "set_holiday_forecast__independence_portrait",
+        holiday: Holiday::Independence,
+        format: 1,
+    },
+    Spec {
+        key: "set_holiday_forecast__independence_square",
+        holiday: Holiday::Independence,
+        format: 2,
+    },
+    Spec {
+        key: "set_holiday_forecast__halloween_portrait",
+        holiday: Holiday::Halloween,
+        format: 1,
+    },
+    Spec {
+        key: "set_holiday_forecast__halloween_square",
+        holiday: Holiday::Halloween,
+        format: 2,
+    },
+    Spec {
+        key: "set_holiday_forecast__veterans_portrait",
+        holiday: Holiday::Veterans,
+        format: 1,
+    },
+    Spec {
+        key: "set_holiday_forecast__veterans_square",
+        holiday: Holiday::Veterans,
+        format: 2,
+    },
+    Spec {
+        key: "set_holiday_forecast__thanksgiving_portrait",
+        holiday: Holiday::Thanksgiving,
+        format: 1,
+    },
+    Spec {
+        key: "set_holiday_forecast__thanksgiving_square",
+        holiday: Holiday::Thanksgiving,
+        format: 2,
+    },
+    Spec {
+        key: "set_holiday_forecast__christmas_portrait",
+        holiday: Holiday::Christmas,
+        format: 1,
+    },
+    Spec {
+        key: "set_holiday_forecast__christmas_square",
+        holiday: Holiday::Christmas,
+        format: 2,
+    },
 ];

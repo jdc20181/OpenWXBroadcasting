@@ -41,8 +41,9 @@ Paste that into OpenWX Broadcasting: **Settings > General > Backend > Hosted ser
 | Remove (keeps settings) | `sudo bash install.sh uninstall` |
 | Remove everything | `sudo bash install.sh uninstall --purge` |
 
-No internet download? Copy the `openwx-relay` program to the server and run
-`sudo bash install.sh --binary ./openwx-relay`. To build it yourself: `--from-source` (needs Rust).
+A release may not include a Linux download. Then build it on the server with `--from-source`,
+or copy the `openwx-relay` program over and run
+`sudo bash install.sh --binary ./openwx-relay`. Building from source needs Rust.
 
 ### HTTPS
 

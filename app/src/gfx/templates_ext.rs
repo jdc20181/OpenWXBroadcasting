@@ -280,6 +280,8 @@ pub const TEMPLATES_EXT: &[TemplateInfo] = &[
     TemplateInfo { key: "holiday_christmas_eve", name: "Christmas Eve Forecast", category: "Holidays", description: "Themed card with the forecast for Christmas Eve: icon, high, rain chance and conditions." },
     TemplateInfo { key: "holiday_christmas", name: "Christmas Forecast", category: "Holidays", description: "Themed card with the forecast for Christmas: icon, high, rain chance and conditions." },
     TemplateInfo { key: "holiday_new_years_eve", name: "New Year's Eve Forecast", category: "Holidays", description: "Themed card with the forecast for New Year's Eve: icon, high, rain chance and conditions." },
+    TemplateInfo { key: "winter_enso_status", name: "El Niño / La Niña Status", category: "Climate", description: "The NOAA Climate Prediction Center's ENSO status and synopsis (El Niño, La Niña or neutral), for winter and seasonal outlooks." },
+    TemplateInfo { key: "winter_outlook_card", name: "Our Winter Outlook", category: "Climate", description: "Your station's own winter call: temperatures, snowfall and confidence. Edit the text to match your outlook." },
 ];
 
 pub fn build(key: &str) -> Option<GraphicDoc> {
@@ -307,6 +309,9 @@ pub fn build(key: &str) -> Option<GraphicDoc> {
         "obs_dashboard" => obs_dashboard(),
         "sun_moon" => sun_moon(),
         "season_countdown" => season_countdown(),
+        "winter_enso_status" => stat_table("El Niño / La Niña", "{{enso.issued}}", "Source: NOAA Climate Prediction Center", &[("Status", "{{enso.status}}"), ("Outlook", "{{enso.synopsis}}")]),
+        // The forecaster's own call: plain text meant to be edited in Graphics Studio.
+        "winter_outlook_card" => stat_table("Our Winter Outlook", "December through February", "Forecast by {{station}} • Guidance: NOAA Climate Prediction Center", &[("Temperatures", "Near normal"), ("Snowfall", "Near normal"), ("Confidence", "Moderate")]),
         "river_stages" => river_stages(),
         "hydrograph" => hydrograph(),
         "excessive_rain" => excessive_rain(),
@@ -1864,7 +1869,7 @@ fn stat_table(title: &str, subtitle: &str, source: &str, rows: &[(&str, &str)]) 
 /// Hero tiles for a short stat table. Values that are sentences (On this day, a viewer
 /// question) get a wide, wrapped panel; numbers get big tiles side by side (2 x 2 for four).
 fn stat_heroes(doc: &mut GraphicDoc, rows: &[(&str, &str)]) {
-    let long = |v: &str| matches!(v, "{{clim.this_day}}" | "{{question.text}}" | "{{clim.yesterday}}" | "{{clim.month_temp}}" | "{{clim.month_precip}}" | "{{drought.home}}" | "{{drought.outlook_month}}" | "{{drought.outlook_season}}" | "{{clim.ytd_precip}}");
+    let long = |v: &str| matches!(v, "{{clim.this_day}}" | "{{question.text}}" | "{{clim.yesterday}}" | "{{clim.month_temp}}" | "{{clim.month_precip}}" | "{{drought.home}}" | "{{drought.outlook_month}}" | "{{drought.outlook_season}}" | "{{clim.ytd_precip}}" | "{{enso.synopsis}}");
     let (top, bottom) = (190.0, 960.0);
     let wide: Vec<&(&str, &str)> = rows.iter().filter(|r| long(r.1)).collect();
     let tiles: Vec<&(&str, &str)> = rows.iter().filter(|r| !long(r.1)).collect();
@@ -2096,6 +2101,10 @@ mod qa_keys {
         std::fs::create_dir_all(&out).unwrap();
         let settings = crate::config::Settings::default();
         let data = crate::data::WxSnapshot::default();
+        // CWX_QA_LIVE=1: load the set graphics' live data (CPC, ENSO, ...) before rendering.
+        if std::env::var_os("CWX_QA_LIVE").is_some() {
+            crate::net::runtime().block_on(crate::gfx::sets::refresh(settings.home));
+        }
         for key in keys.split(',').map(str::trim).filter(|k| !k.is_empty()) {
             let Some(doc) = crate::gfx::templates::build_in(key, "modern") else { continue };
             let pm = crate::program::render_graphic_mode(&doc, &settings, &data, 10_000., 960, 540, None, crate::gfx::check::PreviewData::Sample);

@@ -20,6 +20,8 @@ struct Track {
     states: BTreeSet<u8>,
     ns: Option<u8>,
     dates: BTreeMap<u8, NaiveDate>,
+    /// A record of this track contradicted another; the track is left out of the counts.
+    bad: bool,
 }
 #[derive(Debug)]
 struct Archive {
@@ -70,67 +72,85 @@ fn decode(raw: &str, first: i32, last: i32) -> Option<Archive> {
         h if h == format!("{HEADER},edat,etime") => 2,
         _ => return None,
     };
-    let mut tracks: BTreeMap<(i32, u32), Track> = BTreeMap::new();
+    // Keyed by (year, tornado id). SPC ids are numbers before 2007 and text after
+    // ("0710162316-01"). A record that breaks the format or contradicts itself is skipped and
+    // counted, not allowed to blank every graphic: the archive is used while under 1% of rows
+    // are bad.
+    let mut tracks: BTreeMap<(i32, String), Track> = BTreeMap::new();
+    let (mut rows, mut bad_rows) = (0usize, 0usize);
     for (i, line) in lines.enumerate() {
-        if i >= 150_000 || line.is_empty() || line.contains('"') {
+        if i >= 150_000 || line.contains('"') {
             return None;
         }
+        if line.is_empty() {
+            continue;
+        }
+        rows += 1;
         let f: Vec<_> = line.split(',').collect();
         if f.len() != 29 + extra {
             return None;
         }
-        let om = f[0].parse::<u32>().ok()?;
-        let year = f[1].parse::<i32>().ok()?;
-        let date = NaiveDate::parse_from_str(f[4], "%Y-%m-%d").ok()?;
-        let st = f[8].parse::<u8>().ok()?;
-        let ns = f[21].parse::<u8>().ok()?;
-        let sn = f[22].parse::<u8>().ok()?;
-        let sg = f[23].parse::<i8>().ok()?;
-        if om == 0
-            || !(first..=last).contains(&year)
-            || date.year() != year
-            || date.month() != f[2].parse::<u32>().ok()?
-            || date.day() != f[3].parse::<u32>().ok()?
-            || !valid_state(st, f[7])
-            || f[7].len() != 2
-            || !f[7].bytes().all(|b| b.is_ascii_uppercase())
-            || !(1..=3).contains(&ns)
-            || sn > 1
-        {
-            return None;
+        let parsed = (|| {
+            let om = f[0].trim();
+            let year = f[1].parse::<i32>().ok()?;
+            let date = NaiveDate::parse_from_str(f[4], "%Y-%m-%d").ok()?;
+            let st = f[8].parse::<u8>().ok()?;
+            let ns = f[21].parse::<u8>().ok()?;
+            let sn = f[22].parse::<u8>().ok()?;
+            let sg = f[23].parse::<i8>().ok()?;
+            let ok = !om.is_empty()
+                && om != "0"
+                && om.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-')
+                && date.year() == year
+                && date.month() == f[2].parse::<u32>().ok()?
+                && date.day() == f[3].parse::<u32>().ok()?
+                && f[7].len() == 2
+                && f[7].bytes().all(|b| b.is_ascii_uppercase())
+                && valid_state(st, f[7])
+                && sn <= 1;
+            ok.then(|| (om.to_owned(), year, date, st, ns, sn, sg))
+        })();
+        let Some((om, year, date, st, ns, sn, sg)) = parsed else {
+            bad_rows += 1;
+            continue;
+        };
+        // A segment placeholder (sg -9) carries no track; SPC has at least one with ns 0.
+        if (sn == 0 && sg == -9) || !(first..=last).contains(&year) {
+            continue;
+        }
+        if !(1..=3).contains(&ns) {
+            bad_rows += 1;
+            continue;
         }
         let t = tracks.entry((year, om)).or_default();
-        if t.ns.is_some_and(|old| old != ns) {
-            return None;
-        }
+        let mut consistent = t.ns.is_none_or(|old| old == ns);
         t.ns = Some(ns);
-        if sn == 1 {
-            if t.dates.insert(st, date).is_some_and(|old| old != date) {
-                return None;
-            }
+        if sn == 1 && t.dates.insert(st, date).is_some_and(|old| old != date) {
+            consistent = false;
         }
         match (ns, sn, sg) {
-            (1, 1, 1) => {
+            (1, 1, 1) | (2..=3, 0, 1) => {
                 let whole = (ns, st, date);
                 if t.whole.is_some_and(|old| old != whole) {
-                    return None;
+                    consistent = false;
                 }
                 t.whole = Some(whole);
-                t.states.insert(st);
-            }
-            (2..=3, 0, 1) => {
-                let whole = (ns, st, date);
-                if t.whole.is_some_and(|old| old != whole) {
-                    return None;
+                if ns == 1 {
+                    t.states.insert(st);
                 }
-                t.whole = Some(whole);
             }
             (2..=3, 1, 2) => {
                 t.states.insert(st);
             }
-            (_, 0, -9) => {}
-            _ => return None,
+            _ => consistent = false,
         }
+        if !consistent {
+            t.bad = true;
+            bad_rows += 1;
+        }
+    }
+    if rows == 0 || bad_rows * 100 > rows {
+        return None;
     }
     let mut out = Archive {
         first,
@@ -141,14 +161,17 @@ fn decode(raw: &str, first: i32, last: i32) -> Option<Archive> {
         state_months: BTreeMap::new(),
     };
     for ((year, _), t) in tracks {
-        let (ns, start, date) = t.whole?;
+        if t.bad {
+            continue;
+        }
+        let Some((ns, start, date)) = t.whole else { continue };
         if t.states.len() != ns as usize || !t.states.contains(&start) {
-            return None;
+            continue;
         }
         *out.national.entry(year).or_default() += 1;
         *out.national_months.entry((year, date.month())).or_default() += 1;
         for st in t.states {
-            let date = t.dates.get(&st)?;
+            let Some(date) = t.dates.get(&st) else { continue };
             *out.state_months
                 .entry((st, year, date.month()))
                 .or_default() += 1;
@@ -617,12 +640,12 @@ mod tests {
     #[tokio::test]
     #[ignore = "manual approved-relay archive contract check"]
     async fn live_spc_complete_archive_contract() {
-        let url = "https://www.spc.noaa.gov/wcm/data/1950-2024_all_tornadoes.csv";
+        let url = "https://www.spc.noaa.gov/wcm/data/1950-2025_all_tornadoes.csv";
         let bytes = super::super::report_feed::get_bytes(url, Duration::from_secs(40))
             .await
             .expect("SPC relay archive unavailable");
         let raw = std::str::from_utf8(&bytes).unwrap();
-        let a = decode(raw, 1950, 2024)
+        let a = decode(raw, 1950, 2025)
             .expect("SPC full archive did not satisfy complete-state-segment contract");
         println!(
             "SPC bytes={} years={}–{} national top={:?} Indiana top={:?}",

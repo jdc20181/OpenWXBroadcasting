@@ -6,13 +6,13 @@ OpenWX Broadcasting is released under the [OpenWX License 1.0](../LICENSE).
 
 | | |
 |---|---|
-| Use | Free for anyone |
+| Use | Free for anyone, including businesses, studios and pages that earn money from their coverage |
 | Change and share | Allowed. Shared and hosted versions keep the same licence and include their source |
-| Closed commercial use | Needs a Commercial Waiver, granted for a donation of US $500 or more |
+| Selling the software | Selling it, charging for it, bundling it into a paid product or reselling it as a service needs a Commercial Waiver, granted for a donation of US $500 or more |
 | Third-party parts | Not covered (below) |
 | Warranty | None |
 
-The licence limits closed commercial use, so it is source-available rather than OSI open
+The licence limits selling the software, so it is source-available rather than OSI open
 source. GitHub lists it as "Other".
 
 ## Third-party projects

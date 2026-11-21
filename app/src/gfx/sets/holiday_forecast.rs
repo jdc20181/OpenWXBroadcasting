@@ -10,12 +10,22 @@ use chrono::{Datelike, Duration, NaiveDate, Weekday};
 #[derive(Clone, Copy)]
 enum Holiday {
     NewYear,
+    Mlk,
+    Valentines,
+    Presidents,
+    StPatricks,
     Easter,
     Mothers,
     Memorial,
     Fathers,
+    Juneteenth,
+    Independence,
     Labor,
+    Halloween,
+    Veterans,
+    Thanksgiving,
     ChristmasEve,
+    Christmas,
     NewYearsEve,
 }
 #[derive(Clone, Copy)]
@@ -29,24 +39,44 @@ impl Holiday {
     fn slug(self) -> &'static str {
         match self {
             Self::NewYear => "new_year",
+            Self::Mlk => "mlk",
+            Self::Valentines => "valentines",
+            Self::Presidents => "presidents",
+            Self::StPatricks => "st_patricks",
             Self::Easter => "easter",
             Self::Mothers => "mothers",
             Self::Memorial => "memorial",
             Self::Fathers => "fathers",
+            Self::Juneteenth => "juneteenth",
+            Self::Independence => "independence",
             Self::Labor => "labor",
+            Self::Halloween => "halloween",
+            Self::Veterans => "veterans",
+            Self::Thanksgiving => "thanksgiving",
             Self::ChristmasEve => "christmas_eve",
+            Self::Christmas => "christmas",
             Self::NewYearsEve => "new_years_eve",
         }
     }
     fn name(self) -> &'static str {
         match self {
             Self::NewYear => "New Year's Day",
+            Self::Mlk => "Martin Luther King Jr. Day",
+            Self::Valentines => "Valentine's Day",
+            Self::Presidents => "Presidents' Day",
+            Self::StPatricks => "St. Patrick's Day",
             Self::Easter => "Easter",
             Self::Mothers => "Mother's Day",
             Self::Memorial => "Memorial Day",
             Self::Fathers => "Father's Day",
+            Self::Juneteenth => "Juneteenth",
+            Self::Independence => "Fourth of July",
             Self::Labor => "Labor Day",
+            Self::Halloween => "Halloween",
+            Self::Veterans => "Veterans Day",
+            Self::Thanksgiving => "Thanksgiving",
             Self::ChristmasEve => "Christmas Eve",
+            Self::Christmas => "Christmas",
             Self::NewYearsEve => "New Year's Eve",
         }
     }
@@ -62,7 +92,12 @@ impl Holiday {
         };
         match self {
             Self::NewYear => NaiveDate::from_ymd_opt(year, 1, 1),
+            Self::Mlk => crate::gfx::holidays::date_in("mlk", year),
+            Self::Valentines => crate::gfx::holidays::date_in("valentines", year),
+            Self::Presidents => crate::gfx::holidays::date_in("presidents", year),
+            Self::StPatricks => crate::gfx::holidays::date_in("st_patricks", year),
             Self::ChristmasEve => NaiveDate::from_ymd_opt(year, 12, 24),
+            Self::Christmas => crate::gfx::holidays::date_in("christmas", year),
             Self::NewYearsEve => NaiveDate::from_ymd_opt(year, 12, 31),
             Self::Mothers => nth(5, Weekday::Sun, 2),
             Self::Fathers => nth(6, Weekday::Sun, 3),
@@ -73,6 +108,8 @@ impl Holiday {
                     last.weekday().num_days_from_monday(),
                 )))
             }
+            Self::Juneteenth => crate::gfx::holidays::date_in("juneteenth", year),
+            Self::Independence => crate::gfx::holidays::date_in("independence", year),
             Self::Easter => {
                 // Gregorian ecclesiastical calculation documented by USNO (Oudin, 1940).
                 let c = year / 100;
@@ -88,6 +125,9 @@ impl Holiday {
                 let d = l + 28 - 31 * (m / 4);
                 NaiveDate::from_ymd_opt(year, m as u32, d as u32)
             }
+            Self::Halloween => crate::gfx::holidays::date_in("halloween", year),
+            Self::Veterans => crate::gfx::holidays::date_in("veterans", year),
+            Self::Thanksgiving => crate::gfx::holidays::date_in("thanksgiving", year),
         }
     }
     fn next(self, today: NaiveDate) -> Option<NaiveDate> {
@@ -95,6 +135,23 @@ impl Holiday {
             .into_iter()
             .filter_map(|y| self.date(y))
             .find(|d| *d >= today)
+    }
+}
+impl Holiday {
+    fn needs_title_fit(self) -> bool {
+        matches!(
+            self,
+            Self::Mlk
+                | Self::Valentines
+                | Self::Presidents
+                | Self::StPatricks
+                | Self::Juneteenth
+                | Self::Independence
+                | Self::Halloween
+                | Self::Veterans
+                | Self::Thanksgiving
+                | Self::Christmas
+        )
     }
 }
 pub(super) fn bind(b: &mut Bindings, settings: &Settings) {
@@ -123,13 +180,23 @@ pub(super) fn build(key: &str) -> Option<GraphicDoc> {
     let mut doc =
         super::social_forecast::build(&format!("set_social_forecast__today_point{suffix}"))?;
     for layer in &mut doc.layers {
-        if let LayerKind::Text { text, .. } = &mut layer.kind {
+        if let LayerKind::Text {
+            text,
+            auto_fit,
+            wrap,
+            ..
+        } = &mut layer.kind
+        {
             *text = text.replace(
                 "set.socialforecast.0.",
                 &format!("set.holidayforecast.{}.", s.holiday.slug()),
             );
             if layer.name == "Social Title" {
                 *text = format!("{} Forecast", s.holiday.name());
+                if s.holiday.needs_title_fit() {
+                    *auto_fit = true;
+                    *wrap = false;
+                }
             }
         }
     }
@@ -172,6 +239,22 @@ pub(super) fn sample(doc: &mut GraphicDoc) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashSet;
+
+    fn newly_parameterized() -> [(Holiday, &'static str); 10] {
+        [
+            (Holiday::Mlk, "mlk"),
+            (Holiday::Valentines, "valentines"),
+            (Holiday::Presidents, "presidents"),
+            (Holiday::StPatricks, "st_patricks"),
+            (Holiday::Juneteenth, "juneteenth"),
+            (Holiday::Independence, "independence"),
+            (Holiday::Halloween, "halloween"),
+            (Holiday::Veterans, "veterans"),
+            (Holiday::Thanksgiving, "thanksgiving"),
+            (Holiday::Christmas, "christmas"),
+        ]
+    }
     #[test]
     fn holiday_rules_handle_weekdays_easter_and_inclusive_year_rollover() {
         for (holiday, year, month, day) in [
@@ -202,5 +285,116 @@ mod tests {
                     && easter <= NaiveDate::from_ymd_opt(year, 4, 25).unwrap()
             );
         }
+    }
+
+    #[test]
+    fn new_holiday_dates_and_rollovers_delegate_to_the_shared_holiday_api() {
+        for (holiday, id) in newly_parameterized() {
+            for year in [2026, 2027, 2099] {
+                assert_eq!(holiday.date(year), crate::gfx::holidays::date_in(id, year));
+            }
+            for year in [2026, 2027] {
+                let date = crate::gfx::holidays::date_in(id, year).unwrap();
+                for today in [date - Duration::days(1), date, date + Duration::days(1)] {
+                    assert_eq!(
+                        holiday.next(today),
+                        crate::gfx::holidays::next_date(id, today),
+                        "{id} from {today}"
+                    );
+                }
+            }
+            let year_end = NaiveDate::from_ymd_opt(2026, 12, 31).unwrap();
+            assert_eq!(
+                holiday.next(year_end),
+                crate::gfx::holidays::next_date(id, year_end),
+                "{id} year rollover"
+            );
+        }
+    }
+
+    #[test]
+    fn all_native_holiday_specs_are_unique_and_new_titles_fit_portrait_and_square() {
+        let mut keys = HashSet::new();
+        assert_eq!(SPECS.len(), 36);
+        assert_eq!(SPECS.iter().filter(|s| s.format == 1).count(), 18);
+        assert_eq!(SPECS.iter().filter(|s| s.format == 2).count(), 18);
+        for spec in SPECS {
+            assert!(keys.insert(spec.key), "duplicate holiday key {}", spec.key);
+            assert!(spec.format == 1 || spec.format == 2);
+            let doc = build(spec.key).expect("holiday format builds through shared social layout");
+            assert_eq!(
+                (doc.width, doc.height),
+                if spec.format == 1 {
+                    (1080, 1920)
+                } else {
+                    (1080, 1080)
+                }
+            );
+        }
+        for key in [
+            "set_holiday_forecast__mlk_portrait",
+            "set_holiday_forecast__mlk_square",
+        ] {
+            let doc = build(key).unwrap();
+            let title = doc
+                .layers
+                .iter()
+                .find(|layer| layer.name == "Social Title")
+                .expect("native social title");
+            match &title.kind {
+                LayerKind::Text {
+                    text,
+                    auto_fit,
+                    wrap,
+                    ..
+                } => {
+                    assert_eq!(text.as_str(), "Martin Luther King Jr. Day Forecast");
+                    assert!(*auto_fit, "long title is fitted to native title box");
+                    assert!(!*wrap, "long holiday title remains on one line");
+                }
+                _ => panic!("Social Title remains a text layer"),
+            }
+        }
+        assert_eq!(keys.len(), 36);
+    }
+
+    #[test]
+    fn named_date_horizon_and_missing_forecast_values_remain_delegated() {
+        let settings = Settings::default();
+        let now = chrono::Utc::now().timestamp();
+        let beyond_horizon = crate::gfx::holidays::date_in("christmas", 2099).unwrap();
+        let values = super::super::social_forecast::named_date_values(
+            settings.home,
+            Some(beyond_horizon),
+            "Christmas",
+            now,
+        );
+        let field = |name: &str| {
+            values
+                .iter()
+                .find(|(key, _)| *key == name)
+                .map(|(_, v)| v.as_str())
+        };
+        assert_eq!(field("daytemp"), Some(""));
+        assert_eq!(
+            field("note"),
+            Some("NWS forecast not yet available for the named date")
+        );
+        let expected_period = format!("Christmas • {}", beyond_horizon.format("%a %b %d, %Y"));
+        assert_eq!(field("period"), Some(expected_period.as_str()));
+    }
+
+    #[test]
+    fn new_holiday_sample_binds_through_the_named_identity_namespace() {
+        let key = "set_holiday_forecast__thanksgiving_square";
+        let mut doc = build(key).unwrap();
+        doc.template = Some(key.into());
+        sample(&mut doc);
+        assert!(doc.data_overrides.iter().any(|(name, value)| {
+            name == "set.holidayforecast.thanksgiving.period" && value.contains("SAMPLE")
+        }));
+        assert!(doc.data_overrides.iter().any(|(name, value)| {
+            name == "set.holidayforecast.thanksgiving.note" && value.contains("Named holiday date")
+        }));
     }
 }

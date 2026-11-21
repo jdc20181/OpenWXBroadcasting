@@ -41,8 +41,36 @@ struct Spec {
     portrait: bool,
 }
 include!("model_map_specs.rs");
+// Loop rows reuse the same four already-loaded RAP frames as the timeline graphics.  These
+// are presentation variants only: no additional refresh, request, or snapshot state is added.
+macro_rules! loop_specs_for_fields {
+    ($(($field:ident, $slug:literal, $title:literal)),* $(,)?) => {
+        &[
+            $(
+                Spec { key: concat!("set_model_rap__", $slug, "_loop_region"), field: Metric::$field, title: $title, coverage: Coverage::Region, layout: Layout::Single, portrait: false },
+                Spec { key: concat!("set_model_rap__", $slug, "_loop_state"), field: Metric::$field, title: $title, coverage: Coverage::State, layout: Layout::Single, portrait: false },
+                Spec { key: concat!("set_model_rap__", $slug, "_loop_multi"), field: Metric::$field, title: $title, coverage: Coverage::Multi, layout: Layout::Single, portrait: false },
+                Spec { key: concat!("set_model_rap__", $slug, "_loop_region_portrait"), field: Metric::$field, title: $title, coverage: Coverage::Region, layout: Layout::Single, portrait: true },
+                Spec { key: concat!("set_model_rap__", $slug, "_loop_state_portrait"), field: Metric::$field, title: $title, coverage: Coverage::State, layout: Layout::Single, portrait: true },
+                Spec { key: concat!("set_model_rap__", $slug, "_loop_multi_portrait"), field: Metric::$field, title: $title, coverage: Coverage::Multi, layout: Layout::Single, portrait: true },
+            )*
+        ]
+    };
+}
+const LOOP_SPECS: &[Spec] = loop_specs_for_fields![
+    (Temperature, "temperature", "2 m temperature"),
+    (Dewpoint, "dewpoint", "2 m dew point"),
+    (Humidity, "humidity", "Relative humidity 2 m"),
+    (Wind, "wind", "10 m wind"),
+    (Gust, "gust", "Wind gusts"),
+    (Cloud, "cloud", "Total cloud cover"),
+    (Pressure, "pressure", "Mean sea-level pressure"),
+    (Cape, "cape", "CAPE"),
+];
 // Standard RAP cycles end at +21 h (NCEP product inventory).
 const LEADS: [u32; 4] = [6, 12, 18, 21];
+const LOOP_SECS: f32 = 8.0;
+const FRAME_SECS: f32 = LOOP_SECS / 4.0;
 const MAX_AGE: i64 = 20 * 60;
 
 struct Site {
@@ -490,6 +518,80 @@ fn prefix(s: Spec) -> String {
     )
 }
 
+fn loop_prefix(s: Spec) -> String {
+    let field = match s.field {
+        Metric::Temperature => "temperature",
+        Metric::Dewpoint => "dewpoint",
+        Metric::Humidity => "humidity",
+        Metric::Wind => "wind",
+        Metric::Gust => "gust",
+        Metric::Cloud => "cloud",
+        Metric::Pressure => "pressure",
+        Metric::Cape => "cape",
+    };
+    // Broadcast and portrait variants share the exact same supplied frame payloads.
+    format!("rap.{field}.loop.{}", cov_key(s.coverage))
+}
+
+fn frame_scene(spec: Spec, snap: Option<&Snapshot>, lead: u32) -> Scene {
+    let (legend_title, legend) = bands(spec.field);
+    let mut scene = Scene {
+        reviewed: true,
+        scope: Scope::default(),
+        palette: board::Palette::Category,
+        legend_title: legend_title.into(),
+        legend,
+        panels: Vec::with_capacity(1),
+    };
+    if let Some((snapshot, data)) =
+        snap.and_then(|v| v.scopes.get(cov_key(spec.coverage)).map(|d| (v, d)))
+    {
+        scene.scope = data.scope.clone();
+        if data.frames.contains_key(&lead) {
+            let mut panel = one_panel(data, spec.field, lead, snapshot.run);
+            if !panel.available() && panel.headline.is_empty() {
+                panel.headline = "Data not available yet".into();
+                panel.detail =
+                    "No valid RAP county-centre samples at this lead; no model substituted".into();
+            }
+            // one_panel retains the source frame's valid time when run/lead checks pass. A
+            // failed verification deliberately keeps its valid-time label empty.
+            scene.panels.push(panel);
+        }
+    }
+    if scene.panels.is_empty() {
+        scene.panels.push(Panel {
+            title: format!("{} • RAP", metric_label(spec.field)),
+            valid: String::new(),
+            headline: "Data not available yet".into(),
+            detail: "NOAA RAP data unavailable; no other model substituted".into(),
+            ..Default::default()
+        });
+    }
+    scene
+}
+
+fn opacity_keys(rect: (f32, f32, f32, f32), frame: usize) -> Vec<crate::gfx::model::Keyframe> {
+    use crate::gfx::model::Keyframe;
+    let (x, y, _, _) = rect;
+    let key = |t, active| Keyframe {
+        t, x, y, scale: 1.0, rotation: 0.0,
+        opacity: if active { 1.0 } else { 0.0 },
+        easing: "linear".into(),
+    };
+    let mut keys = vec![key(0.0, frame == 0)];
+    // Paired keys cut instantly. The renderer holds the preceding frame at the
+    // exact boundary and selects the next frame immediately afterward.
+    for boundary in 1..4 {
+        let time = boundary as f32 * FRAME_SECS;
+        keys.push(key(time, frame == boundary - 1));
+        keys.push(key(time, frame == boundary));
+    }
+    keys.push(key(LOOP_SECS, frame == 3));
+    keys.push(key(LOOP_SECS, frame == 0));
+    keys
+}
+
 pub(super) fn bind(b: &mut Bindings, settings: &Settings) {
     let now = Utc::now().timestamp();
     let snap = store()
@@ -540,8 +642,103 @@ pub(super) fn bind(b: &mut Bindings, settings: &Settings) {
             b.set(&format!("set.{p}.{k}"), &v)
         }
     }
+    for spec in LOOP_SPECS.iter().filter(|s| !s.portrait) {
+        let p = loop_prefix(*spec);
+        let mut any = false;
+        for lead in LEADS {
+            let mut sc = frame_scene(*spec, snap.as_deref(), lead);
+            if snap
+                .as_ref()
+                .and_then(|v| v.scopes.get(cov_key(spec.coverage)))
+                .is_none()
+            {
+                sc.scope = scopes[cov_key(spec.coverage)].clone();
+            }
+            any |= sc.panels.iter().any(Panel::available);
+            b.set(
+                &format!("set.{p}.payload_{lead}"),
+                &serde_json::to_string(&sc).unwrap_or_default(),
+            );
+        }
+        let subtitle = snap
+            .as_ref()
+            .and_then(|s| s.run)
+            .map(|r| format!("NOAA RAP run {} • {}", time(r), cov_label(spec.coverage)))
+            .unwrap_or_else(|| "NOAA RAP run unavailable".into());
+        let source = if any {
+            "Source: NOAA / National Weather Service RAP"
+        } else {
+            "Source: NOAA / National Weather Service RAP • Data not available yet"
+        };
+        let note = if any {
+            "County-centre model samples • Conditions vary • Forecast guidance, not an official warning"
+        } else {
+            "RAP fields unavailable from relay • No alternate model substituted"
+        };
+        b.set(&format!("set.{p}.subtitle"), &subtitle);
+        b.set(&format!("set.{p}.source"), source);
+        b.set(&format!("set.{p}.note"), note);
+    }
+}
+
+fn build_loop(s: Spec) -> GraphicDoc {
+    let p = loop_prefix(s);
+    let title = if s.field == Metric::Pressure {
+        "RAP Sea-level pressure".to_string()
+    } else {
+        format!("RAP {}", s.title)
+    };
+    let mut d = if s.portrait {
+        super::reference::social_frame(
+            &title,
+            "Model output maps",
+            &format!("{{{{set.{p}.subtitle}}}}"),
+            &format!("{{{{set.{p}.source}}}}"),
+            true,
+        )
+    } else {
+        super::comparison::template(&title, "Model output maps", &p, Layout::Single)
+    };
+    d.duration = 0.0;
+    let rect = if s.portrait {
+        (54.0, 242.0, 972.0, 1400.0)
+    } else {
+        (70.0, 205.0, 1780.0, 715.0)
+    };
+    if s.portrait {
+        super::reference::label(
+            &mut d,
+            "Map context",
+            (54.0, 1656.0, 972.0, 68.0),
+            &format!("{{{{set.{p}.note}}}}"),
+            26.0,
+            "$muted",
+            Align::Left,
+        );
+    }
+    d.layers
+        .retain(|l| !matches!(&l.kind, crate::gfx::model::LayerKind::RiskMap { .. }));
+    for (i, lead) in LEADS.iter().enumerate() {
+        let mut layer = Layer::risk_map(
+            &format!("RAP +{lead} h frame"),
+            rect.0,
+            rect.1,
+            rect.2,
+            rect.3,
+            &format!("set:board:single:{{{{set.{p}.payload_{lead}}}}}"),
+        )
+        .with_anim(AnimKind::None, 0.0, 0.0);
+        layer.loop_mode = "loop".into();
+        layer.loop_secs = LOOP_SECS;
+        layer.keys = opacity_keys(rect, i);
+        d.layers.push(layer);
+    }
+    d
 }
 pub(super) fn build(key: &str) -> Option<GraphicDoc> {
+    if let Some(spec) = LOOP_SPECS.iter().find(|s| s.key == key) {
+        return Some(build_loop(*spec));
+    }
     let s = *SPECS.iter().find(|v| v.key == key)?;
     let p = prefix(s);
     let title = if s.field == Metric::Pressure {
@@ -589,6 +786,59 @@ pub(super) fn build(key: &str) -> Option<GraphicDoc> {
 
 #[cfg(test)]
 pub(super) fn sample(doc: &mut GraphicDoc) {
+    if let Some(spec) = LOOP_SPECS
+        .iter()
+        .find(|s| Some(s.key) == doc.template.as_deref())
+    {
+        let settings = Settings::default();
+        let scope = observed::report_scope(&settings, spec.coverage);
+        let all = crate::map::boundaries::counties_named();
+        let selected = all
+            .as_ref()
+            .map(|v| board::selected(v, &scope))
+            .unwrap_or_default();
+        let (legend_title, legend) = bands(spec.field);
+        let p = loop_prefix(*spec);
+        for (i, lead) in LEADS.iter().enumerate() {
+            let counties = selected
+                .iter()
+                .enumerate()
+                .map(|(j, c)| (c.fips.clone(), (j + i) % legend.len().max(1)))
+                .collect();
+            let sc = Scene {
+                reviewed: true,
+                scope: scope.clone(),
+                palette: board::Palette::Category,
+                legend_title: format!("SAMPLE • {legend_title}"),
+                legend: legend.clone(),
+                panels: vec![Panel {
+                    title: format!("{} • RAP", metric_label(spec.field)),
+                    valid: format!("SAMPLE • Forecast hour +{lead}"),
+                    detail: "SAMPLE • Synthetic county-centre categories • Not a forecast".into(),
+                    counties: Some(counties),
+                    ..Default::default()
+                }],
+            };
+            doc.data_overrides.push((
+                format!("set.{p}.payload_{lead}"),
+                serde_json::to_string(&sc).unwrap(),
+            ));
+        }
+        for (k, v) in [
+            (
+                "subtitle",
+                "SAMPLE • RAP-style synthetic loop • Not a forecast",
+            ),
+            ("source", "SAMPLE ONLY • Not for broadcast"),
+            (
+                "note",
+                "SAMPLE • Synthetic county-centre categories • Not a forecast",
+            ),
+        ] {
+            doc.data_overrides.push((format!("set.{p}.{k}"), v.into()));
+        }
+        return;
+    }
     let Some(spec) = SPECS
         .iter()
         .find(|s| Some(s.key) == doc.template.as_deref())
@@ -665,6 +915,163 @@ mod tests {
         assert_eq!(SPECS.len(), 96);
         let keys: std::collections::BTreeSet<_> = SPECS.iter().map(|s| s.key).collect();
         assert_eq!(keys.len(), SPECS.len());
+        assert_eq!(LOOP_SPECS.len(), 48);
+        let loop_keys: std::collections::BTreeSet<_> = LOOP_SPECS.iter().map(|s| s.key).collect();
+        assert_eq!(loop_keys.len(), LOOP_SPECS.len());
+    }
+
+    #[test]
+    fn loop_keyframes_are_hard_cuts_with_one_opaque_frame_and_closed_seam() {
+        let rect = (70.0, 205.0, 1780.0, 715.0);
+        let make = |i| {
+            let mut layer = Layer::risk_map(
+                "frame",
+                rect.0,
+                rect.1,
+                rect.2,
+                rect.3,
+                "set:board:single:{}",
+            );
+            layer.loop_mode = "loop".into();
+            layer.loop_secs = LOOP_SECS;
+            layer.keys = opacity_keys(rect, i);
+            layer
+        };
+        let frames: Vec<_> = (0..4).map(make).collect();
+        let checks = [
+            (0.0, 0),
+            (1.25, 0),
+            (2.0, 0),
+            (2.001, 1),
+            (4.0, 1),
+            (4.001, 2),
+            (6.0, 2),
+            (6.001, 3),
+            (7.999, 3),
+            (8.0, 0),
+            (8.001, 0),
+            (15.999, 3),
+            (16.0, 0),
+        ];
+        let mut doc = build(LOOP_SPECS[0].key).expect("loop test template");
+        doc.layers = frames.clone();
+        for (time, expected) in checks {
+            let opacities: Vec<_> = frames
+                .iter()
+                .enumerate()
+                .map(|(_, layer)| {
+                    let t = doc.layer_time(layer, time);
+                    layer.sample_keys(t).unwrap().4
+                })
+                .collect();
+            assert!(
+                opacities.iter().all(|v| *v == 0.0 || *v == 1.0),
+                "no alpha blending at {time}s: {opacities:?}"
+            );
+            assert_eq!(
+                opacities.iter().sum::<f32>(),
+                1.0,
+                "exactly one visible frame at {time}s"
+            );
+            let active: Vec<_> = opacities
+                .iter()
+                .enumerate()
+                .filter_map(|(i, v)| (*v == 1.0).then_some(i))
+                .collect();
+            assert_eq!(active, vec![expected], "phase at {time}s");
+        }
+        for layer in &frames {
+            assert!(layer.keys.iter().all(|k| k.x == rect.0 && k.y == rect.1));
+        }
+    }
+
+    #[test]
+    fn loop_builder_replays_only_the_map_frames_not_station_chrome() {
+        let doc = build(LOOP_SPECS[0].key).expect("loop template");
+        let maps: Vec<_> = doc
+            .layers
+            .iter()
+            .filter(|layer| matches!(&layer.kind, crate::gfx::model::LayerKind::RiskMap { .. }))
+            .collect();
+        assert_eq!(maps.len(), 4);
+        assert!(
+            maps.iter()
+                .all(|layer| layer.loop_mode == "loop" && layer.loop_secs == LOOP_SECS)
+        );
+        assert!(
+            doc.layers
+                .iter()
+                .filter(|layer| !matches!(
+                    &layer.kind,
+                    crate::gfx::model::LayerKind::RiskMap { .. }
+                ))
+                .all(|layer| layer.loop_mode.is_empty())
+        );
+        assert!(
+            maps.iter()
+                .all(|layer| layer.anim_in.kind == AnimKind::None)
+        );
+    }
+
+    #[test]
+    fn loop_phase_payloads_remain_frame_specific_and_unavailable_is_calm() {
+        let missing = LOOP_SPECS[0];
+        for lead in LEADS {
+            let sc = frame_scene(missing, None, lead);
+            assert_eq!(sc.panels.len(), 1);
+            assert!(!sc.panels[0].available());
+            assert_eq!(sc.panels[0].headline, "Data not available yet");
+            assert!(sc.panels[0].counties.is_none());
+        }
+        assert_eq!(LOOP_SECS, 8.0);
+        assert_eq!(LEADS, [6, 12, 18, 21]);
+    }
+
+    #[test]
+    fn qa_export_remaining_loop_phases_both_looks() {
+        let Ok(dir) = std::env::var("CWX_QA_NEW_DIR") else {
+            return;
+        };
+        let selected: Option<std::collections::BTreeSet<String>> =
+            std::env::var("CWX_QA_SET_KEYS").ok().map(|v| {
+                v.split(',')
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty())
+                    .map(str::to_string)
+                    .collect()
+            });
+        let out = std::path::PathBuf::from(dir).join("rap-loops-phases");
+        std::fs::create_dir_all(&out).unwrap();
+        let settings = Settings::default();
+        let data = crate::data::WxSnapshot::default();
+        for spec in LOOP_SPECS
+            .iter()
+            .filter(|s| selected.as_ref().is_none_or(|keys| keys.contains(s.key)))
+        {
+            let Some(mut doc) = build(spec.key) else {
+                panic!("missing loop template {}", spec.key)
+            };
+            doc.template = Some(spec.key.to_string());
+            sample(&mut doc);
+            for look in ["modern", "classic"] {
+                let mut themed = doc.clone();
+                crate::gfx::look::apply(&mut themed, look);
+                for (phase, t) in [(1, 10_003.0), (2, 10_005.0), (3, 10_007.0)] {
+                    let image = crate::program::render_graphic_mode(
+                        &themed,
+                        &settings,
+                        &data,
+                        t,
+                        themed.width,
+                        themed.height,
+                        None,
+                        crate::gfx::check::PreviewData::Sample,
+                    );
+                    let path = out.join(format!("{}-{}-phase-{}.png", spec.key, look, phase));
+                    image.save_png(path).unwrap();
+                }
+            }
+        }
     }
 
     #[test]

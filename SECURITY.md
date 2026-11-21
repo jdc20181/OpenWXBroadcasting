@@ -80,7 +80,7 @@ with no demonstrated impact, and denial of service by flooding a relay you were 
 
 ## For maintainers
 
-- Keep `cargo audit` / `cargo deny` clean in CI; review dependency updates.
+- Run `cargo audit` / `cargo deny` before a release; review dependency updates.
 - Never commit tokens, page IDs, e-mail addresses or a station's home coordinates
   (`docs/repo-hygiene.md`); run a secrets scan before each release.
 - Sign every release; publish the SHA-256 of every artefact next to it.

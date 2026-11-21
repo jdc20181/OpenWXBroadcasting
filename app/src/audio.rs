@@ -202,17 +202,39 @@ pub fn set_presentation_mix(muted: bool, graphic_gain: f32) {
     send(Cmd::PresentationMix { muted, graphic_gain: graphic_gain.clamp(0.0, 2.0) });
 }
 
+/// Output buffer in frames: about 85 ms at 48 kHz. rodio's default (~43 ms) underruns while the
+/// map and compositor load the CPU, which is heard as choppy, stuttering music.
+const OUTPUT_BUFFER_FRAMES: u32 = 4096;
+
+/// Open `device` with the roomier buffer; if the device refuses that size, with rodio's default.
+fn open_device(device: rodio::cpal::Device) -> Result<rodio::MixerDeviceSink, rodio::DeviceSinkError> {
+    let roomy = rodio::DeviceSinkBuilder::from_device(device.clone())
+        .map(|b| b.with_buffer_size(rodio::cpal::BufferSize::Fixed(OUTPUT_BUFFER_FRAMES)))
+        .and_then(|b| b.open_stream());
+    roomy.or_else(|e| {
+        log::warn!("audio output refused a {OUTPUT_BUFFER_FRAMES}-frame buffer ({e}); using its default");
+        rodio::DeviceSinkBuilder::from_device(device).and_then(|b| b.open_stream())
+    })
+}
+
+fn open_default() -> Option<rodio::MixerDeviceSink> {
+    match rodio::cpal::default_host().default_output_device() {
+        Some(device) => open_device(device).ok().or_else(|| rodio::DeviceSinkBuilder::open_default_sink().ok()),
+        None => rodio::DeviceSinkBuilder::open_default_sink().ok(),
+    }
+}
+
 fn open_stream(name: &str) -> Option<rodio::MixerDeviceSink> {
     let host = rodio::cpal::default_host();
     let device = if name.is_empty() { None } else { host.output_devices().ok()?.find(|d| d.description().map(|d| d.name() == name).unwrap_or(false)) };
     match device {
-        Some(d) => match rodio::DeviceSinkBuilder::from_device(d).and_then(|b| b.open_stream()) {
+        Some(d) => match open_device(d) {
             Ok(s) => Some(s),
             Err(e) => {
                 // Output failover: the chosen device is gone or busy; use the default.
                 log::warn!("audio device \"{name}\" failed ({e}); using the default output");
                 crate::broadcast_ops::log_incident("Audio output failover", &format!("\"{name}\" failed: {e}"));
-                rodio::DeviceSinkBuilder::open_default_sink().ok()
+                open_default()
             }
         },
         None => {
@@ -220,7 +242,26 @@ fn open_stream(name: &str) -> Option<rodio::MixerDeviceSink> {
                 log::warn!("audio device \"{name}\" not found; using the default output");
                 crate::broadcast_ops::log_incident("Audio output failover", &format!("\"{name}\" not found"));
             }
-            rodio::DeviceSinkBuilder::open_default_sink().ok()
+            open_default()
+        }
+    }
+}
+
+/// Decode a track from memory: the whole file is read before playback starts, so the real-time
+/// audio callback never waits on the disk (a disk or antivirus stall there is an audible dropout).
+fn decode_file(path: &std::path::Path) -> Option<rodio::Decoder<std::io::Cursor<Vec<u8>>>> {
+    let bytes = match std::fs::read(path) {
+        Ok(bytes) => bytes,
+        Err(_) => {
+            log::warn!("audio file missing: {}", path.display());
+            return None;
+        }
+    };
+    match rodio::Decoder::try_from(std::io::Cursor::new(bytes)) {
+        Ok(source) => Some(source),
+        Err(_) => {
+            log::warn!("can't decode {}", path.display());
+            None
         }
     }
 }
@@ -250,14 +291,7 @@ fn audio_thread(rx: mpsc::Receiver<Cmd>) {
                 let Some(stream) = stream else { continue };
                 let source: Box<dyn rodio::Source + Send> = match input {
                     AudioInput::File(path) => {
-                        let Ok(file) = std::fs::File::open(&path) else {
-                            log::warn!("audio file missing: {}", path.display());
-                            continue;
-                        };
-                        let Ok(source) = rodio::Decoder::try_from(file) else {
-                            log::warn!("can't decode {}", path.display());
-                            continue;
-                        };
+                        let Some(source) = decode_file(&path) else { continue };
                         if looped {
                             use rodio::Source;
                             Box::new(source.repeat_infinite())
@@ -473,4 +507,48 @@ pub fn wav_bytes(samples: &[i16], channels: u16, rate: u32) -> Vec<u8> {
         out.extend_from_slice(&s.to_le_bytes());
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Decode every bundled track to the end, the way playback does (from memory), and report
+    /// formats. A track that fails part-way or has an odd rate/channel layout is a likely cause
+    /// of "choppy and disoriented" playback.
+    #[test]
+    #[ignore = "reads the full music bundle (~800 MB)"]
+    fn every_bundled_track_decodes_cleanly() {
+        use rodio::Source;
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("assets/music");
+        let mut files: Vec<PathBuf> = Vec::new();
+        let mut stack = vec![root];
+        while let Some(dir) = stack.pop() {
+            for entry in std::fs::read_dir(&dir).into_iter().flatten().flatten() {
+                let path = entry.path();
+                if path.is_dir() {
+                    stack.push(path);
+                } else if matches!(path.extension().and_then(|e| e.to_str()), Some("ogg" | "mp3" | "wav")) {
+                    files.push(path);
+                }
+            }
+        }
+        let mut formats = std::collections::BTreeMap::<(u32, u16), usize>::new();
+        let mut failed = Vec::new();
+        for path in &files {
+            let Some(source) = decode_file(path) else {
+                failed.push(format!("{}: can't open or decode", path.display()));
+                continue;
+            };
+            let (rate, channels) = (source.sample_rate().get(), source.channels().get());
+            *formats.entry((rate, channels)).or_default() += 1;
+            let samples = source.count();
+            let seconds = samples as f64 / rate as f64 / channels as f64;
+            if seconds < 1.0 {
+                failed.push(format!("{}: only {seconds:.2} s decoded", path.display()));
+            }
+        }
+        eprintln!("{} tracks; formats (rate, channels): {formats:?}", files.len());
+        assert!(failed.is_empty(), "tracks that don't decode cleanly:\n{}", failed.join("\n"));
+    }
 }

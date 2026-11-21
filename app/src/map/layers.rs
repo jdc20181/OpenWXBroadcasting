@@ -295,6 +295,14 @@ pub fn draw_city_plots(pm: &mut Pixmap, glyphs: &mut GlyphCache, vp: &Viewport, 
                 Some(v) if v >= 10.0 => format!("{v:.0}%"),
                 _ => continue,
             },
+            // A category (0 none, 1 rain, 2 mix, 3 snow), not an amount: name it, and leave dry
+            // towns blank.
+            DataField::PrecipType => match grid.value(field, tf, *lat, *lon).map(|v| v.round() as i32) {
+                Some(1) => "RAIN".to_string(),
+                Some(2) => "MIX".to_string(),
+                Some(3) => "SNOW".to_string(),
+                _ => continue,
+            },
             DataField::RoadHazard => match grid.value(field, tf, *lat, *lon).map(|v| v.round() as i32) {
                 Some(1) => "WET".to_string(),
                 Some(2) => "ICY".to_string(),

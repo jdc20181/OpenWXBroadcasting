@@ -47,6 +47,18 @@ fn classify(condition: &str) -> (&'static str, &'static str) {
     }
 }
 
+/// Returns the established Remix weather-word icon key, suppressing daytime sun at night.
+pub(super) fn icon_for(condition: &str, remaining_night: bool) -> &'static str {
+    let (_, mut icon) = classify(condition);
+    if remaining_night && icon == "suncloud" {
+        icon = if condition.to_ascii_lowercase().contains("cloud") {
+            "cloud"
+        } else {
+            "none"
+        };
+    }
+    icon
+}
 fn get<'a>(values: &'a [(&str, String)], key: &str) -> &'a str {
     values
         .iter()

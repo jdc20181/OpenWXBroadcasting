@@ -13,6 +13,41 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     sync::{Arc, Mutex, OnceLock},
 };
+/// `Spec::first` for the CPC monthly outlook (next calendar month).
+const MONTH: i64 = 30;
+/// `Spec::first` for the CPC 3-month outlook, lead 1 (the next three months, e.g. DJF).
+const SEASON: i64 = 90;
+fn long_range(first: i64) -> bool {
+    first >= MONTH
+}
+/// Days an issued product stays current: 6–10/8–14 day outlooks are daily, the monthly and
+/// 3-month outlooks are issued once a month (third Thursday).
+fn max_age_days(first: i64) -> i64 {
+    if long_range(first) { 45 } else { 2 }
+}
+fn period_label(first: i64) -> &'static str {
+    match first {
+        6 => "6–10 day",
+        8 => "8–14 day",
+        MONTH => "monthly",
+        _ => "3-month",
+    }
+}
+/// Valid period from the long-range services' text: "DJF 2026-2027" (3-month) or "Dec 2026".
+fn valid_period(text: &str) -> Option<(NaiveDate, NaiveDate)> {
+    const MONTHS: [&str; 12] = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const SEASONS: [&str; 12] = ["JFM", "FMA", "MAM", "AMJ", "MJJ", "JJA", "JAS", "ASO", "SON", "OND", "NDJ", "DJF"];
+    let (name, years) = text.trim().split_once(' ')?;
+    let year: i32 = years.split('-').next()?.trim().parse().ok()?;
+    let (month, length) = if let Some(i) = MONTHS.iter().position(|m| *m == name) {
+        (i as u32 + 1, 1)
+    } else {
+        (SEASONS.iter().position(|s| *s == name)? as u32 + 1, 3)
+    };
+    let start = NaiveDate::from_ymd_opt(year, month, 1)?;
+    let end = start.checked_add_months(chrono::Months::new(length))?.pred_opt()?;
+    Some((start, end))
+}
 #[derive(Clone, Copy)]
 struct Spec {
     key: &'static str,
@@ -358,6 +393,342 @@ const SPECS: &[Spec] = &[
         coverage: Coverage::Multi,
         format: 2,
     },
+    Spec {
+        key: "set_cpc_temperature__month_region",
+        precip: false,
+        first: MONTH,
+        coverage: Coverage::Region,
+        format: 0,
+    },
+    Spec {
+        key: "set_cpc_temperature__month_region_portrait",
+        precip: false,
+        first: MONTH,
+        coverage: Coverage::Region,
+        format: 1,
+    },
+    Spec {
+        key: "set_cpc_temperature__month_region_square",
+        precip: false,
+        first: MONTH,
+        coverage: Coverage::Region,
+        format: 2,
+    },
+    Spec {
+        key: "set_cpc_temperature__month_region_overlay",
+        precip: false,
+        first: MONTH,
+        coverage: Coverage::Region,
+        format: 3,
+    },
+    Spec {
+        key: "set_cpc_temperature__month_state",
+        precip: false,
+        first: MONTH,
+        coverage: Coverage::State,
+        format: 0,
+    },
+    Spec {
+        key: "set_cpc_temperature__month_state_portrait",
+        precip: false,
+        first: MONTH,
+        coverage: Coverage::State,
+        format: 1,
+    },
+    Spec {
+        key: "set_cpc_temperature__month_state_square",
+        precip: false,
+        first: MONTH,
+        coverage: Coverage::State,
+        format: 2,
+    },
+    Spec {
+        key: "set_cpc_temperature__month_state_overlay",
+        precip: false,
+        first: MONTH,
+        coverage: Coverage::State,
+        format: 3,
+    },
+    Spec {
+        key: "set_cpc_temperature__month_multi",
+        precip: false,
+        first: MONTH,
+        coverage: Coverage::Multi,
+        format: 0,
+    },
+    Spec {
+        key: "set_cpc_temperature__month_multi_portrait",
+        precip: false,
+        first: MONTH,
+        coverage: Coverage::Multi,
+        format: 1,
+    },
+    Spec {
+        key: "set_cpc_temperature__month_multi_square",
+        precip: false,
+        first: MONTH,
+        coverage: Coverage::Multi,
+        format: 2,
+    },
+    Spec {
+        key: "set_cpc_temperature__month_multi_overlay",
+        precip: false,
+        first: MONTH,
+        coverage: Coverage::Multi,
+        format: 3,
+    },
+    Spec {
+        key: "set_cpc_temperature__season_region",
+        precip: false,
+        first: SEASON,
+        coverage: Coverage::Region,
+        format: 0,
+    },
+    Spec {
+        key: "set_cpc_temperature__season_region_portrait",
+        precip: false,
+        first: SEASON,
+        coverage: Coverage::Region,
+        format: 1,
+    },
+    Spec {
+        key: "set_cpc_temperature__season_region_square",
+        precip: false,
+        first: SEASON,
+        coverage: Coverage::Region,
+        format: 2,
+    },
+    Spec {
+        key: "set_cpc_temperature__season_region_overlay",
+        precip: false,
+        first: SEASON,
+        coverage: Coverage::Region,
+        format: 3,
+    },
+    Spec {
+        key: "set_cpc_temperature__season_state",
+        precip: false,
+        first: SEASON,
+        coverage: Coverage::State,
+        format: 0,
+    },
+    Spec {
+        key: "set_cpc_temperature__season_state_portrait",
+        precip: false,
+        first: SEASON,
+        coverage: Coverage::State,
+        format: 1,
+    },
+    Spec {
+        key: "set_cpc_temperature__season_state_square",
+        precip: false,
+        first: SEASON,
+        coverage: Coverage::State,
+        format: 2,
+    },
+    Spec {
+        key: "set_cpc_temperature__season_state_overlay",
+        precip: false,
+        first: SEASON,
+        coverage: Coverage::State,
+        format: 3,
+    },
+    Spec {
+        key: "set_cpc_temperature__season_multi",
+        precip: false,
+        first: SEASON,
+        coverage: Coverage::Multi,
+        format: 0,
+    },
+    Spec {
+        key: "set_cpc_temperature__season_multi_portrait",
+        precip: false,
+        first: SEASON,
+        coverage: Coverage::Multi,
+        format: 1,
+    },
+    Spec {
+        key: "set_cpc_temperature__season_multi_square",
+        precip: false,
+        first: SEASON,
+        coverage: Coverage::Multi,
+        format: 2,
+    },
+    Spec {
+        key: "set_cpc_temperature__season_multi_overlay",
+        precip: false,
+        first: SEASON,
+        coverage: Coverage::Multi,
+        format: 3,
+    },
+    Spec {
+        key: "set_cpc_precipitation__month_region",
+        precip: true,
+        first: MONTH,
+        coverage: Coverage::Region,
+        format: 0,
+    },
+    Spec {
+        key: "set_cpc_precipitation__month_region_portrait",
+        precip: true,
+        first: MONTH,
+        coverage: Coverage::Region,
+        format: 1,
+    },
+    Spec {
+        key: "set_cpc_precipitation__month_region_square",
+        precip: true,
+        first: MONTH,
+        coverage: Coverage::Region,
+        format: 2,
+    },
+    Spec {
+        key: "set_cpc_precipitation__month_region_overlay",
+        precip: true,
+        first: MONTH,
+        coverage: Coverage::Region,
+        format: 3,
+    },
+    Spec {
+        key: "set_cpc_precipitation__month_state",
+        precip: true,
+        first: MONTH,
+        coverage: Coverage::State,
+        format: 0,
+    },
+    Spec {
+        key: "set_cpc_precipitation__month_state_portrait",
+        precip: true,
+        first: MONTH,
+        coverage: Coverage::State,
+        format: 1,
+    },
+    Spec {
+        key: "set_cpc_precipitation__month_state_square",
+        precip: true,
+        first: MONTH,
+        coverage: Coverage::State,
+        format: 2,
+    },
+    Spec {
+        key: "set_cpc_precipitation__month_state_overlay",
+        precip: true,
+        first: MONTH,
+        coverage: Coverage::State,
+        format: 3,
+    },
+    Spec {
+        key: "set_cpc_precipitation__month_multi",
+        precip: true,
+        first: MONTH,
+        coverage: Coverage::Multi,
+        format: 0,
+    },
+    Spec {
+        key: "set_cpc_precipitation__month_multi_portrait",
+        precip: true,
+        first: MONTH,
+        coverage: Coverage::Multi,
+        format: 1,
+    },
+    Spec {
+        key: "set_cpc_precipitation__month_multi_square",
+        precip: true,
+        first: MONTH,
+        coverage: Coverage::Multi,
+        format: 2,
+    },
+    Spec {
+        key: "set_cpc_precipitation__month_multi_overlay",
+        precip: true,
+        first: MONTH,
+        coverage: Coverage::Multi,
+        format: 3,
+    },
+    Spec {
+        key: "set_cpc_precipitation__season_region",
+        precip: true,
+        first: SEASON,
+        coverage: Coverage::Region,
+        format: 0,
+    },
+    Spec {
+        key: "set_cpc_precipitation__season_region_portrait",
+        precip: true,
+        first: SEASON,
+        coverage: Coverage::Region,
+        format: 1,
+    },
+    Spec {
+        key: "set_cpc_precipitation__season_region_square",
+        precip: true,
+        first: SEASON,
+        coverage: Coverage::Region,
+        format: 2,
+    },
+    Spec {
+        key: "set_cpc_precipitation__season_region_overlay",
+        precip: true,
+        first: SEASON,
+        coverage: Coverage::Region,
+        format: 3,
+    },
+    Spec {
+        key: "set_cpc_precipitation__season_state",
+        precip: true,
+        first: SEASON,
+        coverage: Coverage::State,
+        format: 0,
+    },
+    Spec {
+        key: "set_cpc_precipitation__season_state_portrait",
+        precip: true,
+        first: SEASON,
+        coverage: Coverage::State,
+        format: 1,
+    },
+    Spec {
+        key: "set_cpc_precipitation__season_state_square",
+        precip: true,
+        first: SEASON,
+        coverage: Coverage::State,
+        format: 2,
+    },
+    Spec {
+        key: "set_cpc_precipitation__season_state_overlay",
+        precip: true,
+        first: SEASON,
+        coverage: Coverage::State,
+        format: 3,
+    },
+    Spec {
+        key: "set_cpc_precipitation__season_multi",
+        precip: true,
+        first: SEASON,
+        coverage: Coverage::Multi,
+        format: 0,
+    },
+    Spec {
+        key: "set_cpc_precipitation__season_multi_portrait",
+        precip: true,
+        first: SEASON,
+        coverage: Coverage::Multi,
+        format: 1,
+    },
+    Spec {
+        key: "set_cpc_precipitation__season_multi_square",
+        precip: true,
+        first: SEASON,
+        coverage: Coverage::Multi,
+        format: 2,
+    },
+    Spec {
+        key: "set_cpc_precipitation__season_multi_overlay",
+        precip: true,
+        first: SEASON,
+        coverage: Coverage::Multi,
+        format: 3,
+    },
 ];
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct Category {
@@ -412,7 +783,7 @@ fn date(v: &Value) -> Option<NaiveDate> {
     let d = chrono::DateTime::from_timestamp_millis(ms)?;
     (ms > 0).then(|| d.date_naive())
 }
-fn category(p: &Value) -> Option<Category> {
+fn category(p: &Value, long: bool) -> Option<Category> {
     let n = p.get("prob")?.as_f64()?;
     if !n.is_finite() || !(0.0..=100.0).contains(&n) || n.fract() != 0. {
         return None;
@@ -425,6 +796,10 @@ fn category(p: &Value) -> Option<Category> {
         _ => return None,
     };
     let n = n as u8;
+    if long {
+        // Monthly and 3-month outlooks publish 33-90 % categories, near normal included.
+        return ((kind == 3 && n == 33) || (kind != 3 && (33..=90).contains(&n))).then_some(Category { kind, probability: n });
+    }
     if (kind == 3 && n != 33)
         || (kind == 1 && n != 36)
         || ((kind == 0 || kind == 2) && ![33, 40, 50, 60, 70, 80, 90].contains(&n))
@@ -459,12 +834,17 @@ fn parse(v: &Value, first: i64, now: i64) -> Option<Product> {
             return None;
         }
         let issue = date(p.get("fcst_date")?)?;
-        let start = date(p.get("start_date")?)?;
-        let end = date(p.get("end_date")?)?;
-        if !(0..=2).contains(&(today - issue).num_days())
-            || (start - issue).num_days() != first
-            || (end - start).num_days() != if first == 6 { 4 } else { 6 }
-        {
+        let (start, end) = if long_range(first) {
+            valid_period(p.get("valid_seas")?.as_str()?)?
+        } else {
+            (date(p.get("start_date")?)?, date(p.get("end_date")?)?)
+        };
+        let fits = if long_range(first) {
+            start > issue && (start - issue).num_days() <= 75
+        } else {
+            (start - issue).num_days() == first && (end - start).num_days() == if first == 6 { 4 } else { 6 }
+        };
+        if !(0..=max_age_days(first)).contains(&(today - issue).num_days()) || !fits {
             return None;
         }
         let d = (issue, start, end);
@@ -472,9 +852,10 @@ fn parse(v: &Value, first: i64, now: i64) -> Option<Product> {
             return None;
         };
         dates = Some(d);
-        let category = category(p)?;
+        let category = category(p, long_range(first))?;
         let input = f.get("geometry")?.get("rings")?.as_array()?;
-        if input.is_empty() || input.len() > 512 {
+        // Monthly and 3-month shapes carry many island and coastline rings (958 seen).
+        if input.is_empty() || input.len() > if long_range(first) { 4096 } else { 512 } {
             return None;
         }
         let mut rings = Vec::new();
@@ -563,13 +944,19 @@ fn at(product: &Product, x: f64, y: f64) -> Option<Category> {
     found
 }
 fn query_url(precip: bool, first: i64, bbox: [f64; 4]) -> String {
-    let service = if first == 6 {
-        "cpc_6_10_day_outlk"
-    } else {
-        "cpc_8_14_day_outlk"
+    let service = match (first, precip) {
+        (6, _) => "cpc_6_10_day_outlk",
+        (8, _) => "cpc_8_14_day_outlk",
+        (MONTH, false) => "cpc_mthly_temp_outlk",
+        (MONTH, true) => "cpc_mthly_precip_outlk",
+        (_, false) => "cpc_sea_temp_outlk",
+        (_, true) => "cpc_sea_precip_outlk",
     };
-    let layer = if precip { 1 } else { 0 };
-    format!("https://mapservices.weather.noaa.gov/vector/rest/services/outlooks/{service}/MapServer/{layer}/query?where=1%3D1&outFields=objectid,fcst_date,start_date,end_date,cat,prob&geometry={},{},{},{}&geometryType=esriGeometryEnvelope&inSR=4326&spatialRel=esriSpatialRelIntersects&returnGeometry=true&outSR=4326&f=json",bbox[0],bbox[1],bbox[2],bbox[3])
+    // 6–10/8–14: layer 0 temperature, 1 precipitation. Monthly: one layer. 3-month: layer 0 is
+    // lead 1 (the next three months).
+    let layer = if precip && !long_range(first) { 1 } else { 0 };
+    let dates = if long_range(first) { "valid_seas" } else { "start_date,end_date" };
+    format!("https://mapservices.weather.noaa.gov/vector/rest/services/outlooks/{service}/MapServer/{layer}/query?where=1%3D1&outFields=objectid,fcst_date,{dates},cat,prob&geometry={},{},{},{}&geometryType=esriGeometryEnvelope&inSR=4326&spatialRel=esriSpatialRelIntersects&returnGeometry=true&outSR=4326&f=json",bbox[0],bbox[1],bbox[2],bbox[3])
 }
 async fn fetch(h: GeoView) -> Option<Snapshot> {
     let mut settings = Settings::default();
@@ -599,7 +986,7 @@ async fn fetch(h: GeoView) -> Option<Snapshot> {
     let mut tasks = tokio::task::JoinSet::new();
     let sites = Arc::new(sites);
     for precip in [false, true] {
-        for first in [6, 8] {
+        for first in [6, 8, MONTH, SEASON] {
             let sites = Arc::clone(&sites);
             tasks.spawn(async move {
                 let result = super::report_feed::get_json(&query_url(precip, first, bbox))
@@ -688,9 +1075,8 @@ fn scene(settings: &Settings, s: Spec, product: Option<&Product>) -> Scene {
     .collect();
     let p = &mut scene.panels[0];
     p.title = format!(
-        "CPC {}–{} day {}",
-        s.first,
-        if s.first == 6 { 10 } else { 14 },
+        "CPC {} {} outlook",
+        period_label(s.first),
         if s.precip {
             "precipitation"
         } else {
@@ -781,7 +1167,7 @@ pub(super) fn bind(b: &mut Bindings, settings: &Settings) {
         let product = snapshot
             .as_ref()
             .and_then(|v| v.products.get(&(s.precip, s.first)))
-            .filter(|p| (0..=2).contains(&(today - p.issued).num_days()));
+            .filter(|p| (0..=max_age_days(s.first)).contains(&(today - p.issued).num_days()));
         let p = prefix(*s);
         let scene = scene(settings, *s, product);
         for (key,value) in [("payload",serde_json::to_string(&scene).unwrap_or_default()),("subtitle",product.map(|p|format!("CPC issued {}",p.issued.format("%b %d, %Y"))).unwrap_or_else(||"Published period outlook".into())),("source","Source: NOAA / NWS Climate Prediction Center".into()),("note","County-centre samples • Equal chances gives no favoured category • Local conditions vary".into())] {b.set(&format!("set.{p}.{key}"),&value);}
@@ -815,7 +1201,7 @@ pub(super) fn sample(doc: &mut GraphicDoc) {
     let mut product = Product {
         issued: now,
         start: now + chrono::Duration::days(s.first),
-        end: now + chrono::Duration::days(if s.first == 6 { 10 } else { 14 }),
+        end: now + chrono::Duration::days(match s.first { 6 => 10, 8 => 14, MONTH => 60, _ => 180 }),
         areas: Vec::new(),
         values: BTreeMap::new(),
     };
@@ -960,5 +1346,26 @@ mod tests {
         assert_eq!(p.values["inside"].label(), "Above 50%");
         p.areas.clear();
         assert_eq!(p.values["inside"].label(), "Above 50%");
+    }
+    #[test]
+    fn long_range_periods_come_from_the_season_text() {
+        let d = |y, m, day| NaiveDate::from_ymd_opt(y, m, day).unwrap();
+        assert_eq!(valid_period("DJF 2026-2027"), Some((d(2026, 12, 1), d(2027, 2, 28))));
+        assert_eq!(valid_period("JFM 2027"), Some((d(2027, 1, 1), d(2027, 3, 31))));
+        assert_eq!(valid_period("Dec 2026"), Some((d(2026, 12, 1), d(2026, 12, 31))));
+        assert_eq!(valid_period("XYZ 2026"), None);
+    }
+    /// Live: this winter's CPC 3-month (lead 1) and monthly outlooks parse with their real dates.
+    #[test]
+    #[ignore = "network"]
+    fn live_long_range_outlooks_parse() {
+        let bbox = [-92.0, 36.0, -84.0, 42.0];
+        let now = chrono::Utc::now().timestamp();
+        for (precip, first) in [(false, SEASON), (true, SEASON), (false, MONTH), (true, MONTH)] {
+            let v = crate::net::runtime().block_on(super::super::report_feed::get_json(&query_url(precip, first, bbox))).expect("NOAA answered");
+            let p = parse(&v, first, now).unwrap_or_else(|| panic!("parse failed for precip={precip} first={first}"));
+            eprintln!("precip={precip} first={first}: issued {} valid {}–{} areas {}", p.issued, p.start, p.end, p.areas.len());
+            assert!(p.end > p.start && !p.areas.is_empty());
+        }
     }
 }

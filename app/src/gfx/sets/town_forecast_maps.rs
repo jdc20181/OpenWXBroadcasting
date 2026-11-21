@@ -20,6 +20,8 @@ use std::{
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 enum Kind {
     HighLow,
+    High,
+    Low,
     Precipitation,
 }
 #[derive(Clone, Copy)]
@@ -44,6 +46,8 @@ fn coverage_key(coverage: Coverage) -> &'static str {
 fn kind_key(kind: Kind) -> &'static str {
     match kind {
         Kind::HighLow => "highlow",
+        Kind::High => "high",
+        Kind::Low => "low",
         Kind::Precipitation => "precip",
     }
 }
@@ -77,6 +81,18 @@ fn period_label(day: u8, night: bool) -> &'static str {
         }
     }
 }
+fn kind_note(kind: Kind, day: u8, night: bool) -> String {
+    match kind {
+        Kind::Low => format!(
+            "{} • Low is for the overnight period beginning that evening • Up to six selected towns • Local conditions vary",
+            period_label(day, night)
+        ),
+        Kind::Precipitation => {
+            "Probability of precipitation (not rain-only) • Up to six selected towns • Local conditions vary".into()
+        }
+        _ => "Up to six selected towns • Not a complete area forecast".into(),
+    }
+}
 fn prefix(spec: &Spec) -> String {
     format!(
         "set.townmaps.{}.{}.{}",
@@ -84,6 +100,21 @@ fn prefix(spec: &Spec) -> String {
         day_key(spec.day, spec.night),
         coverage_key(spec.coverage)
     )
+}
+fn binding_specs() -> Vec<&'static Spec> {
+    let mut seen = std::collections::HashSet::<String>::new();
+    SPECS
+        .iter()
+        .filter(|spec| {
+            seen.insert(format!(
+                "{}:{}:{}:{}",
+                kind_key(spec.kind),
+                coverage_key(spec.coverage),
+                spec.day,
+                spec.night
+            ))
+        })
+        .collect()
 }
 fn chance_bucket(value: f32) -> usize {
     if value <= 0.0 {
@@ -151,6 +182,8 @@ fn coverage_info(home: crate::config::GeoView) -> Option<Arc<HashMap<&'static st
 fn bands(kind: Kind) -> Vec<board::Band> {
     let rows: &[(&str, &str)] = match kind {
         Kind::HighLow => &[("NWS town forecast values • °F", "#64B5D9")],
+        Kind::High => &[("Daytime forecast high • °F", "#64B5D9")],
+        Kind::Low => &[("Overnight low • °F", "#64B5D9")],
         Kind::Precipitation => &[
             ("0%", "#667E92"),
             ("1–19%", "#01B414"),
@@ -196,6 +229,14 @@ fn point_label(
                 .unwrap_or_else(|| "unavailable".into());
             Some((format!("H {high} / L {low}"), 0., 0))
         }
+        Kind::High => values
+            .high
+            .as_ref()
+            .map(|(text, value)| (text.clone(), *value, 0)),
+        Kind::Low => values
+            .low
+            .as_ref()
+            .map(|(text, value)| (text.clone(), *value, 0)),
         Kind::Precipitation => {
             let chance = if night {
                 values.nighttime_pop
@@ -247,6 +288,22 @@ fn summary_value(
                 format!("{date}H {high} • L {low}")
             }
         }
+        Kind::High => values
+            .high
+            .as_ref()
+            .map(|(text, _)| format!("{date}{text}"))
+            .unwrap_or_else(|| {
+                if day == 0 && !values.has_daytime {
+                    "High withheld • no daytime period".into()
+                } else {
+                    MISSING.into()
+                }
+            }),
+        Kind::Low => values
+            .low
+            .as_ref()
+            .map(|(text, _)| format!("{date}{text}"))
+            .unwrap_or_else(|| MISSING.into()),
         Kind::Precipitation => {
             let value = if night {
                 values.nighttime_pop
@@ -303,7 +360,11 @@ fn town_markers(
             } else {
                 format!(
                     "Towns {}",
-                    numbers.iter().map(|n| n.to_string()).collect::<Vec<_>>().join(", ")
+                    numbers
+                        .iter()
+                        .map(|n| n.to_string())
+                        .collect::<Vec<_>>()
+                        .join(", ")
                 )
             };
             // Precipitation keeps the group's highest chance (its colour bucket and value).
@@ -318,7 +379,14 @@ fn town_markers(
                 .map(|(_, p)| (p.category, p.value))
                 .unwrap_or((0, None));
             ReportPoint {
-                id: format!("towns-{}-{lon:.4}-{lat:.4}", numbers.iter().map(|n| n.to_string()).collect::<Vec<_>>().join("_")),
+                id: format!(
+                    "towns-{}-{lon:.4}-{lat:.4}",
+                    numbers
+                        .iter()
+                        .map(|n| n.to_string())
+                        .collect::<Vec<_>>()
+                        .join("_")
+                ),
                 lon,
                 lat,
                 label,
@@ -341,6 +409,8 @@ fn scene(
 ) -> Scene {
     let title = match kind {
         Kind::HighLow => "Town high and low points",
+        Kind::High => "Town forecast highs",
+        Kind::Low => "Town overnight lows",
         Kind::Precipitation => "Town precipitation chances",
     };
     let mut dates = rows
@@ -402,6 +472,8 @@ fn scene(
         palette: Palette::Category,
         legend_title: match kind {
             Kind::HighLow => "NWS 12-hour point periods • temperature in °F".into(),
+            Kind::High => "NWS daytime period • forecast high in °F".into(),
+            Kind::Low => "Overnight low • period begins on named day • °F".into(),
             Kind::Precipitation => "Probability of measurable precipitation by town".into(),
         },
         legend: bands(kind),
@@ -428,21 +500,7 @@ pub(super) fn bind(b: &mut Bindings, settings: &Settings) {
         label: "Selected area unavailable".into(),
         scope: unavailable_scope,
     };
-    let mut seen = std::collections::HashSet::<String>::new();
-    for spec in SPECS {
-        if spec.format != 0 {
-            continue;
-        }
-        let semantic_key = format!(
-            "{}:{}:{}:{}",
-            kind_key(spec.kind),
-            coverage_key(spec.coverage),
-            spec.day,
-            spec.night
-        );
-        if !seen.insert(semantic_key) {
-            continue;
-        }
+    for spec in binding_specs() {
         let rows = super::city_forecast::town_forecast_map_rows(
             settings.home,
             spec.coverage,
@@ -454,8 +512,15 @@ pub(super) fn bind(b: &mut Bindings, settings: &Settings) {
             .as_ref()
             .and_then(|areas| areas.get(coverage_key(spec.coverage)))
             .unwrap_or(&unavailable_area);
-        let payload = serde_json::to_string(&scene(area, spec.coverage, spec.kind, spec.day, spec.night, rows))
-            .unwrap_or_default();
+        let payload = serde_json::to_string(&scene(
+            area,
+            spec.coverage,
+            spec.kind,
+            spec.day,
+            spec.night,
+            rows,
+        ))
+        .unwrap_or_default();
         let p = prefix(spec);
         b.set(&format!("{p}.payload"), &payload);
         b.set(
@@ -472,11 +537,7 @@ pub(super) fn bind(b: &mut Bindings, settings: &Settings) {
         );
         b.set(
             &format!("{p}.note"),
-            if spec.kind == Kind::Precipitation {
-                "Probability of precipitation (not rain-only) • Up to six selected towns • Local conditions vary"
-            } else {
-                "Up to six selected towns • Not a complete area forecast"
-            },
+            &kind_note(spec.kind, spec.day, spec.night),
         );
     }
 }
@@ -486,6 +547,8 @@ pub(super) fn build(key: &str) -> Option<GraphicDoc> {
     let p = prefix(&spec);
     let title = match spec.kind {
         Kind::HighLow => "Town Highs and Lows",
+        Kind::High => "Town Highs",
+        Kind::Low => "Town Overnight Lows",
         Kind::Precipitation => "Precipitation Chance",
     };
     let subtitle = format!("{{{{{p}.period}}}} • {{{{{p}.scope}}}}", p = p);
@@ -720,6 +783,47 @@ mod tests {
     use crate::gfx::sets::{board, social_forecast::CityMapDay};
 
     #[test]
+    fn single_temperature_specs_preserve_existing_and_add_tonight_rows() {
+        let specs: Vec<_> = super::SPECS
+            .iter()
+            .filter(|s| matches!(s.kind, Kind::High | Kind::Low))
+            .collect();
+        assert_eq!(specs.len(), 176);
+        let mut keys = std::collections::HashSet::new();
+        assert!(specs.iter().all(|spec| keys.insert(spec.key)));
+        assert!(!keys.contains("set_town_forecast_maps__high_today_county"));
+        assert!(!keys.contains("set_town_forecast_maps__high_today_county_overlay"));
+        assert!(!keys.contains("set_town_forecast_maps__low_today_county"));
+        assert!(!keys.contains("set_town_forecast_maps__low_today_county_overlay"));
+        assert_eq!(specs.iter().filter(|spec| spec.night).count(), 12);
+        assert!(specs.iter().all(|spec| {
+            (!spec.night && (0..=6).contains(&spec.day)) || (spec.night && spec.day == 0)
+        }));
+        for kind in [Kind::High, Kind::Low] {
+            let chosen: Vec<_> = super::binding_specs()
+                .into_iter()
+                .filter(|spec| spec.kind == kind)
+                .collect();
+            assert_eq!(chosen.len(), if kind == Kind::Low { 24 } else { 21 });
+            let county_today = chosen
+                .iter()
+                .find(|spec| spec.day == 0 && spec.coverage == super::Coverage::County)
+                .unwrap();
+            assert_eq!(county_today.format, 1); // first available variant is portrait
+            assert!(
+                super::SPECS.iter().any(|spec| {
+                    spec.kind == kind
+                        && spec.day == 0
+                        && spec.coverage == super::Coverage::County
+                        && spec.format == 2
+                        && super::prefix(spec) == super::prefix(county_today)
+                }),
+                "portrait-selected county payload must bind the same portrait/square prefix"
+            );
+        }
+    }
+
+    #[test]
     fn precipitation_buckets_preserve_zero_and_boundaries() {
         assert_eq!(chance_bucket(0.), 0);
         assert_eq!(chance_bucket(1.), 1);
@@ -745,6 +849,228 @@ mod tests {
                 .0,
             "H unavailable / L -12°"
         );
+    }
+
+    #[test]
+    fn high_and_low_point_values_are_independent_and_withheld_when_missing() {
+        let both = CityMapDay {
+            date: "Sat Nov 14".into(),
+            high: Some(("72°F".into(), 72.)),
+            low: Some(("51°F".into(), 51.)),
+            daytime_pop: None,
+            nighttime_pop: None,
+            has_daytime: true,
+            issue: String::new(),
+        };
+        assert_eq!(
+            super::point_label(Kind::High, 1, false, &both).unwrap().0,
+            "72°F"
+        );
+        assert_eq!(
+            super::point_label(Kind::Low, 1, false, &both).unwrap().0,
+            "51°F"
+        );
+
+        let only_low = CityMapDay {
+            high: None,
+            ..both.clone()
+        };
+        assert!(super::point_label(Kind::High, 1, false, &only_low).is_none());
+        assert_eq!(
+            super::point_label(Kind::Low, 1, false, &only_low)
+                .unwrap()
+                .0,
+            "51°F"
+        );
+        assert_eq!(
+            super::summary_value(Kind::High, 1, false, Some(&only_low), false),
+            super::MISSING
+        );
+
+        let only_high = CityMapDay {
+            low: None,
+            ..both.clone()
+        };
+        assert_eq!(
+            super::point_label(Kind::High, 1, false, &only_high)
+                .unwrap()
+                .0,
+            "72°F"
+        );
+        assert!(super::point_label(Kind::Low, 1, false, &only_high).is_none());
+        assert_eq!(
+            super::summary_value(Kind::Low, 1, false, Some(&only_high), false),
+            super::MISSING
+        );
+
+        let no_daytime = CityMapDay {
+            has_daytime: false,
+            high: None,
+            ..both
+        };
+        assert!(super::point_label(Kind::High, 0, false, &no_daytime).is_none());
+        assert_eq!(
+            super::summary_value(Kind::High, 0, false, Some(&no_daytime), false),
+            "High withheld • no daytime period"
+        );
+    }
+
+    #[test]
+    fn low_presentation_names_the_night_period_begun_on_the_selected_day() {
+        let note = super::kind_note(Kind::Low, 3, false);
+        assert!(note.contains("Day 4"));
+        assert!(note.contains("overnight period beginning that evening"));
+        assert_eq!(super::bands(Kind::Low)[0].label, "Overnight low • °F");
+        let values = CityMapDay {
+            date: "Wed Nov 18".into(),
+            high: Some(("71°F".into(), 71.)),
+            low: Some(("48°F".into(), 48.)),
+            daytime_pop: None,
+            nighttime_pop: None,
+            has_daytime: true,
+            issue: String::new(),
+        };
+        let row = super::super::city_forecast::TownForecastMapRow {
+            name: "Jeffersonville, IN".into(),
+            lon: -85.7372,
+            lat: 38.2776,
+            values: Some(values),
+        };
+        let map = scene(
+            &area(),
+            super::Coverage::County,
+            Kind::Low,
+            3,
+            false,
+            Some(&[row]),
+        );
+        assert!(map.panels[0].title.contains("overnight lows"));
+        assert!(map.legend_title.contains("period begins on named day"));
+        assert!(super::kind_note(Kind::Low, 3, false)
+            .contains("overnight period beginning that evening"));
+        assert_eq!(map.panels[0].summary.as_ref().unwrap()[0].1, "48°F");
+    }
+
+    #[test]
+    fn tonight_low_specs_reuse_day_zero_values_and_only_change_period_labels() {
+        let rows = [super::super::city_forecast::TownForecastMapRow {
+            name: "Jeffersonville, IN".into(),
+            lon: -85.7372,
+            lat: 38.2776,
+            values: Some(CityMapDay {
+                date: "Wed Nov 18".into(),
+                high: Some(("71°F".into(), 71.)),
+                low: Some(("48°F".into(), 48.)),
+                daytime_pop: None,
+                nighttime_pop: None,
+                has_daytime: true,
+                issue: "Updated 06:00 UTC".into(),
+            }),
+        }];
+        let today = scene(
+            &area(),
+            super::Coverage::County,
+            Kind::Low,
+            0,
+            false,
+            Some(&rows),
+        );
+        let tonight = scene(
+            &area(),
+            super::Coverage::County,
+            Kind::Low,
+            0,
+            true,
+            Some(&rows),
+        );
+
+        assert_eq!(
+            serde_json::to_value(&today.scope).unwrap(),
+            serde_json::to_value(&tonight.scope).unwrap()
+        );
+        assert_eq!(today.reviewed, tonight.reviewed);
+        assert_eq!(today.panels[0].available(), tonight.panels[0].available());
+        assert_eq!(today.panels[0].valid, tonight.panels[0].valid);
+        assert_eq!(today.panels[0].detail, tonight.panels[0].detail);
+        assert_eq!(
+            serde_json::to_value(&today.panels[0].points).unwrap(),
+            serde_json::to_value(&tonight.panels[0].points).unwrap()
+        );
+        assert_eq!(today.panels[0].summary, tonight.panels[0].summary);
+        assert_eq!(today.panels[0].summary.as_ref().unwrap()[0].1, "48°F");
+        assert_eq!(today.panels[0].valid, "Wed Nov 18");
+        assert!(today.panels[0].title.contains("Town overnight lows"));
+        assert!(tonight.panels[0].title.contains("Town overnight lows"));
+        assert_eq!(super::period_label(0, true), "Tonight");
+        assert!(super::kind_note(Kind::Low, 0, true).starts_with("Tonight •"));
+
+        let unavailable_today = scene(&area(), super::Coverage::County, Kind::Low, 0, false, None);
+        let unavailable_tonight = scene(&area(), super::Coverage::County, Kind::Low, 0, true, None);
+        assert_eq!(unavailable_today.reviewed, unavailable_tonight.reviewed);
+        assert_eq!(
+            unavailable_today.panels[0].available(),
+            unavailable_tonight.panels[0].available()
+        );
+        assert_eq!(
+            serde_json::to_value(&unavailable_today.scope).unwrap(),
+            serde_json::to_value(&unavailable_tonight.scope).unwrap()
+        );
+        assert_eq!(
+            unavailable_today.panels[0].detail,
+            unavailable_tonight.panels[0].detail
+        );
+        assert_eq!(
+            unavailable_today.panels[0].summary,
+            unavailable_tonight.panels[0].summary
+        );
+        assert_eq!(unavailable_today.panels[0].valid, "Today");
+        assert_eq!(unavailable_tonight.panels[0].valid, "Tonight");
+
+        let tonight_specs: Vec<_> = super::SPECS
+            .iter()
+            .filter(|spec| spec.kind == Kind::Low && spec.night)
+            .collect();
+        assert_eq!(tonight_specs.len(), 12);
+        let keys: std::collections::HashSet<_> =
+            tonight_specs.iter().map(|spec| spec.key).collect();
+        assert_eq!(keys.len(), 12);
+        assert!(tonight_specs.iter().all(|spec| spec.day == 0));
+        for format in 0..=3 {
+            assert_eq!(
+                tonight_specs
+                    .iter()
+                    .filter(|spec| spec.format == format)
+                    .count(),
+                3
+            );
+        }
+        for coverage in [
+            super::Coverage::County,
+            super::Coverage::Region,
+            super::Coverage::State,
+        ] {
+            assert_eq!(
+                tonight_specs
+                    .iter()
+                    .filter(|spec| spec.coverage == coverage)
+                    .count(),
+                4
+            );
+        }
+        for spec in tonight_specs {
+            let format_suffix = match spec.format {
+                0 => "",
+                1 => "_portrait",
+                2 => "_square",
+                _ => "_overlay",
+            };
+            let scope = super::coverage_key(spec.coverage);
+            assert_eq!(
+                spec.key,
+                format!("set_town_forecast_maps__low_tonight_{scope}{format_suffix}")
+            );
+            assert!((0..=3).contains(&spec.format));
+        }
     }
 
     fn area() -> CoverageInfo {
@@ -774,7 +1100,14 @@ mod tests {
                 issue: "Updated 06:00 UTC".into(),
             }),
         };
-        let map = scene(&area(), super::Coverage::County, Kind::HighLow, 1, false, Some(&[row]));
+        let map = scene(
+            &area(),
+            super::Coverage::County,
+            Kind::HighLow,
+            1,
+            false,
+            Some(&[row]),
+        );
         let summary = map.panels[0].summary.as_ref().unwrap();
         assert!(summary[0].1.contains("-12°F"));
         assert!(summary[0].1.chars().count() <= 40);
@@ -798,7 +1131,14 @@ mod tests {
                 issue: String::new(),
             }),
         };
-        let map = scene(&area(), super::Coverage::County, Kind::Precipitation, 0, false, Some(&[row]));
+        let map = scene(
+            &area(),
+            super::Coverage::County,
+            Kind::Precipitation,
+            0,
+            false,
+            Some(&[row]),
+        );
         assert!(map.panels[0].points.is_none());
         assert_eq!(map.panels[0].summary.as_ref().unwrap()[0].1, super::MISSING);
         let json = serde_json::to_string(&map).unwrap();
@@ -870,19 +1210,21 @@ mod tests {
     /// callouts that hide each other; county maps keep one numbered marker per town.
     #[test]
     fn state_scale_groups_crowded_towns_and_numbers_every_marker() {
-        let town = |name: &str, lon: f64, lat: f64, hi: &str| super::super::city_forecast::TownForecastMapRow {
-            name: name.into(),
-            lon,
-            lat,
-            values: Some(CityMapDay {
-                date: "Wed Nov 18".into(),
-                high: Some((format!("{hi}°F"), 70.)),
-                low: Some(("48°F".into(), 48.)),
-                daytime_pop: None,
-                nighttime_pop: None,
-                has_daytime: true,
-                issue: String::new(),
-            }),
+        let town = |name: &str, lon: f64, lat: f64, hi: &str| {
+            super::super::city_forecast::TownForecastMapRow {
+                name: name.into(),
+                lon,
+                lat,
+                values: Some(CityMapDay {
+                    date: "Wed Nov 18".into(),
+                    high: Some((format!("{hi}°F"), 70.)),
+                    low: Some(("48°F".into(), 48.)),
+                    daytime_pop: None,
+                    nighttime_pop: None,
+                    has_daytime: true,
+                    issue: String::new(),
+                }),
+            }
         };
         let rows = [
             town("Jeffersonville, IN", -85.7372, 38.2776, "71"),
@@ -890,13 +1232,42 @@ mod tests {
             town("Sellersburg, IN", -85.7550, 38.3981, "69"),
             town("Evansville, IN", -87.5711, 37.9716, "72"),
         ];
-        let state = scene(&area(), super::Coverage::State, Kind::HighLow, 4, false, Some(&rows));
-        let labels: Vec<_> = state.panels[0].points.as_ref().unwrap().iter().map(|p| p.label.clone()).collect();
-        assert_eq!(labels, vec!["Towns 1–3".to_string(), "4 • H 72° / L 48°".to_string()]);
-        let county = scene(&area(), super::Coverage::County, Kind::HighLow, 4, false, Some(&rows));
+        let state = scene(
+            &area(),
+            super::Coverage::State,
+            Kind::HighLow,
+            4,
+            false,
+            Some(&rows),
+        );
+        let labels: Vec<_> = state.panels[0]
+            .points
+            .as_ref()
+            .unwrap()
+            .iter()
+            .map(|p| p.label.clone())
+            .collect();
+        assert_eq!(
+            labels,
+            vec!["Towns 1–3".to_string(), "4 • H 72° / L 48°".to_string()]
+        );
+        let county = scene(
+            &area(),
+            super::Coverage::County,
+            Kind::HighLow,
+            4,
+            false,
+            Some(&rows),
+        );
         assert_eq!(county.panels[0].points.as_ref().unwrap().len(), 4);
         let summary = state.panels[0].summary.as_ref().unwrap();
-        assert_eq!(summary[0], ("1. Jeffersonville, IN".to_string(), "H 71°F • L 48°F".to_string()));
+        assert_eq!(
+            summary[0],
+            (
+                "1. Jeffersonville, IN".to_string(),
+                "H 71°F • L 48°F".to_string()
+            )
+        );
         let json = serde_json::to_string(&state).unwrap();
         assert!(board::parse(&json, board::Layout::Single).is_some());
     }
@@ -939,7 +1310,7 @@ mod tests {
             .iter()
             .filter(|spec| spec.format == 3)
             .collect();
-        assert_eq!(overlays.len(), 45);
+        assert_eq!(overlays.len(), 88); // Existing45 plus40 high/low and3 Tonight-low overlays.
         for overlay in overlays {
             let source = super::SPECS
                 .iter()

@@ -9,7 +9,8 @@ use std::time::Duration;
 
 const HOURS: i64 = 168;
 const MAX_AGE: i64 = 20 * 60;
-const MAX_BYTES: usize = 16 * 1024 * 1024;
+// Full-detail WPC QPF contours reach 15 MB on an ordinary day; leave room for big rain events.
+const MAX_BYTES: usize = 64 * 1024 * 1024;
 
 pub(super) struct Snapshot {
     pub reports: Vec<StormReport>,

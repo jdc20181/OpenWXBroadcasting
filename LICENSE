@@ -7,12 +7,14 @@ Copyright (c) 2026 the OpenWX Broadcasting project maintainers
 -------------------------------------------------------------------------------
 In plain words (this summary is not the licence; the terms below are):
 
-  - Anyone may use OpenWX, free of charge.
+  - Anyone may use OpenWX, free of charge. That includes businesses, small studios,
+    and pages or channels that make money from the weather coverage they produce.
   - Anyone may change it, build on it and share it.
   - Anything you share that is based on OpenWX keeps this same licence, with its
     source code.
-  - Closed or proprietary commercial use needs a Commercial Waiver: a donation of
-    US $500 or more to the project grants one.
+  - Making money from the software itself (selling it, charging for access to it,
+    bundling it into a paid product, or reselling it as a hosted service) needs a
+    Commercial Waiver: a donation of US $500 or more to the project grants one.
   - Third-party parts (radar services, music, fonts, icons, libraries) keep their
     own licences.
   - There is no warranty, and the authors are not liable for what happens when you
@@ -44,16 +46,16 @@ relay) also counts as Distributing it.
 
 "You" means the person or legal entity exercising rights under this Licence.
 
-"Commercial Use" means using the Software or a Derivative Work for monetary
-compensation or commercial advantage, including selling it, selling access to
-it, licensing it, bundling it with a paid product or service, or offering it as
-a paid hosted service. Running the Software to produce your own weather
-coverage, including coverage that carries advertising or sponsorship, is not by
-itself Commercial Use of the Software.
+"Commercial Use" means making money from the Software or a Derivative Work
+itself: selling, renting or licensing it, charging for access to it or for
+copies of it, bundling it with a paid product or service, or offering it to
+others as a paid hosted service.
 
-"Closed Commercial Use" means Commercial Use in which the Software or a
-Derivative Work is not made available under this Licence with its complete
-Source Code to everyone who receives or uses it.
+"Production Use" means using the Software to make weather coverage, graphics,
+shows, posts or other output, by anyone, including businesses, broadcasters,
+studios, and pages or channels that earn money from advertising, sponsorship,
+subscriptions or paying clients. Production Use is not Commercial Use, and what
+You make with the Software is Yours.
 
 "Source Code" means the preferred form of a work for making changes to it,
 including the build scripts needed to produce a working program.
@@ -63,11 +65,11 @@ including the build scripts needed to produce a working program.
 Subject to the terms of this Licence, the Licensor grants You a worldwide,
 royalty-free, non-exclusive licence to:
 
-  (a) use and run the Software for any purpose except Closed Commercial Use
-      without a Commercial Waiver (section 4);
+  (a) use and run the Software for any purpose, including Production Use;
   (b) copy, modify and adapt the Software and create Derivative Works; and
   (c) Distribute the Software and Derivative Works under the conditions in
-      section 3.
+      section 3, free of charge or for no more than the cost of providing
+      copies. Commercial Use needs a Commercial Waiver (section 4).
 
 3. CONDITIONS FOR DISTRIBUTION (SHARE-ALIKE)
 
@@ -86,7 +88,8 @@ If You Distribute the Software or a Derivative Work, You must:
 
 4. COMMERCIAL USE AND THE COMMERCIAL WAIVER
 
-  (a) Closed Commercial Use is not permitted without a Commercial Waiver.
+  (a) Commercial Use is not permitted without a Commercial Waiver, whether or not
+      the Source Code is shared. Production Use never needs one.
 
   (b) A Commercial Waiver is granted to an individual or legal entity that makes a
       single donation of US $500 or more to the OpenWX Broadcasting project
@@ -95,8 +98,8 @@ If You Distribute the Software or a Derivative Work, You must:
       sponsor listing) from the Licensor.
 
   (c) A Commercial Waiver lets the holder use, modify and Distribute the Software
-      and its Derivative Works for Closed Commercial Use, without the conditions
-      in section 3(a) and 3(c). Sections 3(b), 3(e), 5, 6, 7 and 8 still apply.
+      and its Derivative Works for Commercial Use, without the conditions in
+      section 3(a) and 3(c). Sections 3(b), 3(e), 5, 6, 7 and 8 still apply.
 
   (d) A Commercial Waiver is perpetual for every version of the Software
       released before or within one year after the date of the donation. It
@@ -108,8 +111,6 @@ If You Distribute the Software or a Derivative Work, You must:
       after a future change to this Licence. Waivers already granted are not
       affected.
 
-  (f) Commercial Use that fully meets section 3, with the complete Source Code
-      shared under this Licence, does not need a Commercial Waiver.
 
 5. THIRD-PARTY COMPONENTS
 
