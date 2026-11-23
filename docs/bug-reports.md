@@ -2,7 +2,7 @@
 
 CrowdedWX saves reports locally (`%APPDATA%\CrowdedWXBroadcaster\bug-reports`, text + up to
 three screenshots). OpenWX keeps that dialog and, when the user agrees, files the report as a
-GitHub issue on the project repository (`jdc20181/OpenWX-Broadcasting`, private until release).
+GitHub issue on the project repository (`jdc20181/OpenWXBroadcasting`).
 GitHub is the first backend; the design allows another tracker later.
 
 ## How it works

@@ -645,6 +645,11 @@ impl Settings {
             self.settings_version = 2;
             log::info!("settings migrated to version {SETTINGS_VERSION}");
         }
+        // Builds 1-3 pointed at a repository address that doesn't exist (OpenWX-Broadcasting) and
+        // at GitHub's "latest" link, which skips the alpha prereleases. Read the repository instead.
+        if self.update_feed.contains("/OpenWX-Broadcasting") || self.update_feed.trim().is_empty() {
+            self.update_feed = crate::updater::DEFAULT_FEED.into();
+        }
         self
     }
 }
@@ -723,7 +728,7 @@ impl Default for Settings {
             obs_password: String::new(),
             obs_severe_scene: "Severe Weather".into(),
             obs_normal_scene: "Weather".into(),
-            update_feed: "https://github.com/jdc20181/OpenWX-Broadcasting/releases/latest/download/latest.json".into(),
+            update_feed: crate::updater::DEFAULT_FEED.into(),
             auto_check_updates: true,
             skipped_version: None,
             update_channel: "stable".into(),
@@ -953,9 +958,12 @@ impl Settings {
         Ok(())
     }
 
-    /// Update feed for the chosen channel (beta reads latest-beta.json beside latest.json).
+    /// Update feed for the chosen channel. A GitHub repository is used as is (the channel picks
+    /// which release, see `updater::check`); a JSON feed's beta reads latest-beta.json beside it.
     pub fn update_feed_for_channel(&self) -> String {
-        if self.update_channel == "beta" {
+        if crate::updater::github_repo(&self.update_feed).is_some() {
+            self.update_feed.clone()
+        } else if self.update_beta() {
             match self.update_feed.rsplit_once('/') {
                 Some((base, _)) => format!("{base}/latest-beta.json"),
                 None => self.update_feed.clone(),
@@ -963,6 +971,10 @@ impl Settings {
         } else {
             self.update_feed.clone()
         }
+    }
+
+    pub fn update_beta(&self) -> bool {
+        self.update_channel == "beta"
     }
 
     pub fn api_url(&self, path: &str) -> String {

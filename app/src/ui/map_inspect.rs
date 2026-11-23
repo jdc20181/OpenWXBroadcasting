@@ -203,7 +203,7 @@ pub fn card<V: 'static>(
         // Clicks and scrolling inside the card stay in the card.
         .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
         .on_mouse_up(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-        .on_scroll_wheel(|_, _, cx| cx.stop_propagation())
+        .on_scroll(|_, _, cx| cx.stop_propagation())
         .child(
             row()
                 .gap(px(8.))

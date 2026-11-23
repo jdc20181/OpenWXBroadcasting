@@ -1,6 +1,6 @@
 # Repository hygiene (public repo)
 
-Repository: https://github.com/jdc20181/OpenWX-Broadcasting (private until release).
+Repository: https://github.com/jdc20181/OpenWXBroadcasting (public, early alpha).
 
 The CrowdedWX working folder holds thousands of files that must never reach the public repo:
 build output (`target/`, `target-codex/`, ~GBs), QA renders and contact sheets, audit

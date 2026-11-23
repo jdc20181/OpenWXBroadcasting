@@ -1,4 +1,4 @@
-//! The model grid read straight from NOAA's GRIB2 files (GFS 0.25° through the DCWeather relay's
+//! The model grid read straight from NOAA's GRIB2 files (GFS 0.25° through the relay's
 //! NOMADS filter), with no Open-Meteo. Child module of `grid` so it fills the same layers and
 //! every map, graphic and derived field works unchanged.
 //!
@@ -327,15 +327,24 @@ static HRRR_FROM_NOAA: std::sync::atomic::AtomicBool = std::sync::atomic::Atomic
 
 pub fn set_hrrr_from_noaa(ok: bool) {
     HRRR_FROM_NOAA.store(ok, std::sync::atomic::Ordering::Relaxed);
+    if !ok {
+        HRRR_FAILED_AT.store(chrono::Utc::now().timestamp(), std::sync::atomic::Ordering::Relaxed);
+    }
+}
+
+static HRRR_FAILED_AT: std::sync::atomic::AtomicI64 = std::sync::atomic::AtomicI64::new(0);
+
+/// False for 30 minutes after a NOAA HRRR file was missing; the map shows GFS meanwhile.
+pub fn hrrr_available() -> bool {
+    HRRR_FROM_NOAA.load(std::sync::atomic::Ordering::Relaxed)
+        || chrono::Utc::now().timestamp() - HRRR_FAILED_AT.load(std::sync::atomic::Ordering::Relaxed) > 30 * 60
 }
 
 /// Whether a grid of this model over these bounds really comes from NOAA (for credits).
 pub fn from_noaa(model: GridModel, bounds: (f64, f64, f64, f64)) -> bool {
-    match model {
-        GridModel::Gfs => true,
-        GridModel::Hrrr => fits(model, bounds) && HRRR_FROM_NOAA.load(std::sync::atomic::Ordering::Relaxed),
-        _ => false,
-    }
+    // Every map grid is NOAA now (HRRR, or GFS when HRRR can't cover the view).
+    let _ = (model, bounds);
+    true
 }
 
 fn max_lead(model: GridModel) -> i64 {
@@ -447,11 +456,26 @@ pub async fn fetch_box((north, south, west, east): (f64, f64, f64, f64), nx: usi
             let path = format!("model-frame?source={source}&fields=grid&run={run}&lead={lead}&{region}");
             let points = points.clone();
             async move {
-                let result = async {
-                    let bytes = crate::net::broadcaster_route(&path, timeout).await?.bytes().await?;
-                    tokio::task::spawn_blocking(move || decode(&bytes, &points)).await?
+                // A busy relay (503) or a NOMADS throttle fails one file now and then: try it again
+                // after a short wait before giving up on it. A decode error is not retried.
+                let mut result = Err(anyhow!("not fetched"));
+                for (attempt, wait) in [0u64, 3, 8, 15].into_iter().enumerate() {
+                    if wait > 0 {
+                        tokio::time::sleep(std::time::Duration::from_secs(wait)).await;
+                    }
+                    let fetched = async { anyhow::Ok(crate::net::broadcaster_route(&path, timeout).await?.bytes().await?) }.await;
+                    match fetched {
+                        Ok(bytes) => {
+                            let points = points.clone();
+                            result = tokio::task::spawn_blocking(move || decode(&bytes, &points)).await.map_err(anyhow::Error::from).and_then(|r| r);
+                            break;
+                        }
+                        Err(e) => {
+                            log::warn!("NOAA {source} file +{lead} h, try {}: {e:#}", attempt + 1);
+                            result = Err(e);
+                        }
+                    }
                 }
-                .await;
                 PROGRESS.0.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                 (lead, result)
             }
@@ -471,15 +495,26 @@ pub async fn fetch_box((north, south, west, east): (f64, f64, f64, f64), nx: usi
         }
     }
     frames.sort_by_key(|(lead, _)| *lead);
-    // Every file is needed: a gap would be filled by interpolation and hide a real change.
-    if frames.len() != leads.len() {
-        // An older relay ignores fields=grid and sends only the precipitation fields.
-        if first_error.as_ref().is_some_and(|e| e.to_string().contains("no 2 m temperature")) {
-            return Err(anyhow!("The DCWeather relay is older than this app: deploy DCWeatherSite so NOAA map grids get every field"));
-        }
+    // An older relay ignores fields=grid and sends only the precipitation fields.
+    if frames.len() != leads.len() && first_error.as_ref().is_some_and(|e| e.to_string().contains("no 2 m temperature")) {
+        return Err(anyhow!("The relay is older than this app: update OpenWX Relay so NOAA map grids get every field"));
+    }
+    // A gap would be filled by interpolation and hide a real change, so the grid keeps only the
+    // unbroken run of files from the first one: if a later file still failed after its retries,
+    // the map ends at the hour before it instead of showing nothing at all.
+    let unbroken = leads.iter().zip(frames.iter()).take_while(|(want, (got, _))| *want == got).count();
+    if unbroken < 2 {
         let missing = leads.len() - frames.len();
         return Err(first_error.unwrap_or_else(|| anyhow!("missing files")).context(format!("{missing} of {} NOAA {} files failed", leads.len(), model.label())));
     }
+    let last = if unbroken < leads.len() {
+        let end = leads[unbroken - 1];
+        log::warn!("NOAA {} grid ends at +{end} h: {} of {} files failed ({:#})", model.label(), leads.len() - frames.len(), leads.len(), first_error.as_ref().map(|e| e.to_string()).unwrap_or_default());
+        frames.truncate(unbroken);
+        end
+    } else {
+        last
+    };
     build(model, run, first, last, &frames, nx, ny, (north, south, west, east))
 }
 

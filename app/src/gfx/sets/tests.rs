@@ -10,6 +10,9 @@ fn sample(doc: &mut GraphicDoc) {
     show_ident::sample(doc);
     show_schedule::sample(doc);
     sponsor_cards::sample(doc);
+    catalog_model_graphics::sample(doc);
+    community_feature_cards::sample(doc);
+    producer_story_cards::sample(doc);
     multi_day_forecast_cards::sample(doc);
     season_countdown_cards::sample(doc);
     forecast_editor_cards::sample(doc);
@@ -466,6 +469,8 @@ fn qa_reference_graphics() {
                         "Today" if info.key.starts_with("set_forecast_story") => "-today",
                         "Tomorrow" if info.key.starts_with("set_forecast_story") => "-tomorrow",
                         "Day 3" if info.key.starts_with("set_forecast_story") => "-day3",
+                        "Question" if info.key.starts_with("set_weather_quiz") => "-question",
+                        "Answer" if info.key.starts_with("set_weather_quiz") => "-answer",
                         "With photo" => "-photo",
                         "Map" => "-map",
                         "Table"

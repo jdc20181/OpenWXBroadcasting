@@ -18,7 +18,7 @@ OpenWX Relay servers installed with `server/install.sh` update with `sudo bash i
 **Please do not open a public issue for a security problem.**
 
 Report it privately through GitHub: **Security > Report a vulnerability** on the
-[repository](https://github.com/jdc20181/OpenWX-Broadcasting/security/advisories/new).
+[repository](https://github.com/jdc20181/OpenWXBroadcasting/security/advisories/new).
 If you cannot use GitHub, open an issue that only asks for a private contact (no details).
 
 Include what you can:

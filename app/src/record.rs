@@ -73,6 +73,37 @@ impl Recording {
         })
     }
 
+    /// Stop taking frames now and finish the file on a background thread (waiting for the
+    /// encoder, then mixing in the sound), so the UI never freezes on a long show export.
+    /// The result arrives on the returned channel.
+    pub fn stop_in_background(mut self, compositor: &Compositor) -> Receiver<Result<PathBuf>> {
+        if self.map_bus { compositor.set_map_recorder(None); } else { compositor.set_recorder(None); }
+        let clips = if !self.map_bus && self.format == RecordFormat::Mp4 { crate::audio::capture_take() } else { Vec::new() };
+        let handle = self.handle.take();
+        let fallback = self.path.clone();
+        let (tx, rx) = mpsc::channel();
+        let spawned = std::thread::Builder::new().name("recording-finish".into()).spawn(move || {
+            let result = match handle {
+                Some(handle) => handle.join().map_err(|_| anyhow!("recorder thread panicked")).and_then(|r| r),
+                None => Ok(fallback),
+            };
+            let result = result.inspect(|path| {
+                if !clips.is_empty() {
+                    if let Err(e) = crate::audio_mix::add_to_mp4(path, &clips) {
+                        log::warn!("recording {} saved without its sound: {e:#}", path.display());
+                    }
+                }
+            });
+            let _ = tx.send(result);
+        });
+        if let Err(e) = spawned {
+            let (tx, rx) = mpsc::channel();
+            let _ = tx.send(Err(anyhow!("could not finish the recording: {e}")));
+            return rx;
+        }
+        rx
+    }
+
     /// Stop and finalize the file. Returns its path.
     pub fn stop(mut self, compositor: &Compositor) -> Result<PathBuf> {
         if self.map_bus { compositor.set_map_recorder(None); } else { compositor.set_recorder(None); }

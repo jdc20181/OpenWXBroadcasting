@@ -14,10 +14,10 @@ default-members = ["app", "relay", "cli"]
 
 [workspace.package]
 license-file = "LICENSE"
-version = "0.1.0"
+version = "0.1.2"
 edition = "2021"
 authors = ["OpenWX Broadcasting contributors"]
-repository = "https://github.com/jdc20181/OpenWX-Broadcasting"
+repository = "https://github.com/jdc20181/OpenWXBroadcasting"
 
 [profile.dev]
 opt-level = 1

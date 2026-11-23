@@ -1,6 +1,10 @@
 //! Update checking and installing.
 //!
-//! The feed (`settings.update_feed`, default https://dcweather.xyz/broadcaster/latest.json) is:
+//! Releases are published on GitHub (https://github.com/jdc20181/OpenWXBroadcasting/releases). The app reads the
+//! repository's release list (`settings.update_feed`, default the repository address): the Stable
+//! channel takes the newest full release, or the newest prerelease while there is none (alpha);
+//! Beta takes the newest release of any kind. Each release carries the installer and a signed
+//! `latest.json` written by `openwx-release`. Any other address is read as a `latest.json` feed:
 //! ```json
 //! {
 //!   "version": "0.2.0",
@@ -28,10 +32,100 @@ use crate::{
     net,
 };
 
-/// Public half of the release signing key (~/.tauri/openwx-broadcaster.key.pub).
-pub const UPDATE_PUBLIC_KEY: &str = "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDM5RjgxOEUxQjBGRkZCRDkKUldUWisvK3c0Umo0T1hCQnhJYVhXb3B6MnFXUkRZV2crQ2lRSm1DK0NEV0V2NUJxb0dWai8rR3EK";
+/// Public half of the OpenWX release signing key (`openwx-release keygen`; the secret half stays
+/// with the maintainer in ~/.tauri/openwx-broadcaster.key).
+pub const UPDATE_PUBLIC_KEY: &str = "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEQzM0MwMDAzNUEzMDVCRjMKUldUeld6QmFBd0E4MHhITXNJQ0JpamFvSjFsNTExcUFOcUt2QXdOUFM4SHlOSk9MNmVzbDlEL0kK";
 
 pub const PLATFORM: &str = "windows-x86_64";
+
+/// Where OpenWX releases are published.
+pub const DEFAULT_FEED: &str = "https://github.com/jdc20181/OpenWXBroadcasting";
+
+/// `(owner, repository)` when the feed is a GitHub repository address
+/// (`https://github.com/<owner>/<repo>`, with or without anything after it).
+pub fn github_repo(feed: &str) -> Option<(String, String)> {
+    let rest = feed.trim().strip_prefix("https://github.com/")?;
+    let mut parts = rest.split('/').filter(|p| !p.is_empty());
+    let owner = parts.next()?;
+    let repo = parts.next()?.trim_end_matches(".git");
+    Some((owner.to_owned(), repo.to_owned()))
+}
+
+#[derive(Clone, Debug, Deserialize)]
+struct GithubAsset {
+    name: String,
+    browser_download_url: String,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+struct GithubRelease {
+    #[serde(default)]
+    tag_name: String,
+    #[serde(default)]
+    html_url: String,
+    #[serde(default)]
+    draft: bool,
+    #[serde(default)]
+    prerelease: bool,
+    #[serde(default)]
+    assets: Vec<GithubAsset>,
+}
+
+/// The release a channel installs from GitHub's list (newest first). Stable: the newest full
+/// release, or the newest prerelease when there are only prereleases. Beta: the newest of any kind.
+fn pick_release(releases: &[GithubRelease], beta: bool) -> Option<&GithubRelease> {
+    let published = || releases.iter().filter(|r| !r.draft);
+    if beta {
+        published().next()
+    } else {
+        published().find(|r| !r.prerelease).or_else(|| published().next())
+    }
+}
+
+/// The update manifest of the release the channel would install, read from its `latest.json`.
+async fn github_manifest(owner: &str, repo: &str, beta: bool) -> Result<UpdateManifest> {
+    let api = format!("https://api.github.com/repos/{owner}/{repo}/releases?per_page=30");
+    let response = net::http()
+        .get(&api)
+        .header("Accept", "application/vnd.github+json")
+        .header("X-GitHub-Api-Version", "2022-11-28")
+        .send()
+        .await
+        .with_context(|| format!("could not reach GitHub ({owner}/{repo})"))?;
+    if response.status() == reqwest::StatusCode::NOT_FOUND {
+        return Err(anyhow!("GitHub has no repository {owner}/{repo}"));
+    }
+    if response.status() == reqwest::StatusCode::FORBIDDEN || response.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
+        return Err(anyhow!("GitHub is limiting update checks from this network; try again in an hour"));
+    }
+    if !response.status().is_success() {
+        return Err(anyhow!("{} from GitHub", response.status()));
+    }
+    let releases: Vec<GithubRelease> = response.json().await.context("GitHub's release list is not valid JSON")?;
+    let Some(release) = pick_release(&releases, beta) else {
+        return Err(anyhow!("no releases have been published at github.com/{owner}/{repo} yet"));
+    };
+    let feed = release.assets.iter().find(|a| a.name == "latest.json").ok_or_else(|| {
+        anyhow!("release {} has no latest.json, so it can't be installed from here; download it from {}", release.tag_name, release.html_url)
+    })?;
+    let mut manifest: UpdateManifest = net::http()
+        .get(&feed.browser_download_url)
+        .send()
+        .await
+        .with_context(|| format!("could not download latest.json from release {}", release.tag_name))?
+        .error_for_status()?
+        .json()
+        .await
+        .context("latest.json in the release is not valid JSON")?;
+    // The installer is downloaded from the same release, whatever address latest.json was made with.
+    if let Some(asset) = manifest.platforms.get_mut(PLATFORM) {
+        let name = asset.url.rsplit('/').next().unwrap_or_default().to_owned();
+        if let Some(found) = release.assets.iter().find(|a| !name.is_empty() && a.name == name) {
+            asset.url = found.browser_download_url.clone();
+        }
+    }
+    Ok(manifest)
+}
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PlatformAsset {
@@ -111,9 +205,22 @@ impl UpdateManifest {
 }
 
 /// Fetch the feed. Returns Some(manifest) when a newer version exists for this platform.
-pub async fn check(feed: String) -> Result<Option<UpdateManifest>> {
+pub async fn check(feed: String, beta: bool) -> Result<Option<UpdateManifest>> {
+    let manifest = match github_repo(&feed) {
+        Some((owner, repo)) => github_manifest(&owner, &repo, beta).await?,
+        None => json_feed(&feed).await?,
+    };
+    if is_newer(&manifest.version, manifest.build, APP_VERSION, APP_BUILD) && manifest.platforms.contains_key(PLATFORM) {
+        Ok(Some(manifest))
+    } else {
+        Ok(None)
+    }
+}
+
+/// A `latest.json` feed at any address.
+async fn json_feed(feed: &str) -> Result<UpdateManifest> {
     let response = net::http()
-        .get(&feed)
+        .get(feed)
         .header("Cache-Control", "no-cache")
         .send()
         .await
@@ -124,12 +231,7 @@ pub async fn check(feed: String) -> Result<Option<UpdateManifest>> {
     if !response.status().is_success() {
         return Err(anyhow!("{} from {feed}", response.status()));
     }
-    let manifest: UpdateManifest = response.json().await.context("update feed is not valid JSON")?;
-    if is_newer(&manifest.version, manifest.build, APP_VERSION, APP_BUILD) && manifest.platforms.contains_key(PLATFORM) {
-        Ok(Some(manifest))
-    } else {
-        Ok(None)
-    }
+    response.json().await.context("update feed is not valid JSON")
 }
 
 fn decode_b64_text(value: &str) -> Result<String> {
@@ -249,6 +351,25 @@ mod tests {
         assert!(!is_newer("0.1.1", 3, "0.1.1", 3));
         assert!(!is_newer("invalid", 100, "0.1.1", 3));
     }
+    #[test]
+    fn github_feeds_and_channels() {
+        assert_eq!(github_repo(DEFAULT_FEED), Some(("jdc20181".into(), "OpenWXBroadcasting".into())));
+        assert_eq!(github_repo("https://github.com/a/b.git/"), Some(("a".into(), "b".into())));
+        assert_eq!(github_repo("https://example.org/latest.json"), None);
+        let rel = |tag: &str, draft: bool, prerelease: bool| GithubRelease {
+            tag_name: tag.into(), html_url: String::new(), draft, prerelease, assets: vec![],
+        };
+        // Alpha: only prereleases, so both channels take the newest one (drafts never count).
+        let alpha = [rel("draft", true, false), rel("0.1.2", false, true), rel("0.1.0", false, true)];
+        assert_eq!(pick_release(&alpha, false).unwrap().tag_name, "0.1.2");
+        assert_eq!(pick_release(&alpha, true).unwrap().tag_name, "0.1.2");
+        // Once a full release exists, Stable stays on it and Beta takes newer prereleases.
+        let mixed = [rel("0.2.1-beta", false, true), rel("0.2.0", false, false), rel("0.1.2", false, true)];
+        assert_eq!(pick_release(&mixed, false).unwrap().tag_name, "0.2.0");
+        assert_eq!(pick_release(&mixed, true).unwrap().tag_name, "0.2.1-beta");
+        assert!(pick_release(&[], false).is_none());
+    }
+
     #[test]
     fn invalid_installer_signatures_are_rejected() {
         assert!(verify_signature(b"not an installer", "invalid").is_err());

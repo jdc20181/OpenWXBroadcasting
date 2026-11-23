@@ -7,7 +7,7 @@
 //! Values are bilinear in space and linear in time, so the Futurecast and data loops tween
 //! smoothly between model hours.
 
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 
 use crate::{map::scene::DataField, net};
 
@@ -82,7 +82,9 @@ pub enum GridModel {
 }
 
 impl GridModel {
-    pub const ALL: [GridModel; 8] = [Self::Gfs, Self::Nam, Self::Hrrr, Self::Nbm, Self::Ecmwf, Self::Icon, Self::Gem, Self::Blend];
+    /// The models the map offers: the ones read from NOAA's own files. The others stay in the
+    /// enum so older settings still load; they show NOAA GFS.
+    pub const ALL: [GridModel; 2] = [Self::Hrrr, Self::Gfs];
 
     pub fn label(self) -> &'static str {
         match self {
@@ -117,7 +119,7 @@ impl GridModel {
             Self::Blend => "Open-Meteo picks the best model for each place and hour (Open-Meteo)",
             Self::Gfs => "NOAA global model, read directly from NOAA, 7 days",
             Self::Nam => "NOAA North American model, 12 km, about 2.5 days (Open-Meteo)",
-            Self::Hrrr => "NOAA high-resolution rapid refresh, 3 km, 48 hours, read directly from NOAA (state-size views; the whole country comes through Open-Meteo)",
+            Self::Hrrr => "NOAA high-resolution rapid refresh, 3 km, 48 hours, read directly from NOAA (state- and region-size views; wider views show NOAA GFS)",
             Self::Nbm => "NOAA National Blend of Models (Open-Meteo)",
             Self::Ecmwf => "European global model, IFS 0.25° (Open-Meteo)",
             Self::Icon => "German global model, DWD (Open-Meteo)",
@@ -174,8 +176,6 @@ pub fn kuchera_ratio(t_sfc: f32, t850: f32, t700: f32) -> f32 {
     if tmax_k > 271.16 { 12.0 + 2.0 * (271.16 - tmax_k) } else { 12.0 + (271.16 - tmax_k) }.clamp(3.0, 30.0)
 }
 
-/// Upper-air and ground variables for the severe / winter ingredient maps (Settings > Data).
-const HOURLY_EXT: &str = "cape,temperature_850hPa,dew_point_850hPa,temperature_700hPa,temperature_500hPa,wind_speed_850hPa,wind_direction_850hPa,wind_speed_500hPa,wind_direction_500hPa,vertical_velocity_700hPa,geopotential_height_850hPa,geopotential_height_500hPa,freezing_level_height,soil_temperature_0cm,soil_temperature_0_to_10cm,soil_moisture_0_to_10cm,soil_moisture_0_to_1cm";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PrecipKind {
@@ -813,9 +813,6 @@ impl WxGrid {
     }
 }
 
-/// Ten variables (the most that count as one call per point). Dew point and feels like are
-/// computed from temperature, humidity and wind.
-const HOURLY: &str = "temperature_2m,relative_humidity_2m,wind_speed_10m,wind_direction_10m,wind_gusts_10m,pressure_msl,cloud_cover,precipitation,snowfall,weather_code";
 
 /// Dew point (F) from temperature (F) and relative humidity (%), Magnus formula.
 fn dew_point_f(temp_f: f32, rh: f32) -> f32 {
@@ -924,6 +921,14 @@ fn fill_node(data: &mut [Vec<f32>], (nt, nx, ny): (usize, usize, usize), (j, i):
 }
 
 /// Grid bounds for a view, padded so small pans don't refetch.
+/// The NOAA model a view really gets. HRRR when it covers the view and the field needs no
+/// upper-air data (the NOAA HRRR files are surface-only, so precipitation type and the winter and
+/// severe ingredients come from GFS), and HRRR loaded recently; GFS otherwise.
+pub fn effective_model(model: GridModel, view: crate::config::GeoView, extended: bool) -> GridModel {
+    let hrrr_ok = model == GridModel::Hrrr && !extended && noaa::fits(model, grid_bounds(view)) && noaa::hrrr_available();
+    if hrrr_ok { GridModel::Hrrr } else { GridModel::Gfs }
+}
+
 /// Whether the map grid for this view and model is read from NOAA (credits and info text).
 pub fn grid_from_noaa(model: GridModel, view: crate::config::GeoView) -> bool {
     noaa::from_noaa(model, grid_bounds(view))
@@ -985,166 +990,31 @@ async fn air_quality(points: &[(f64, f64)], times: &[i64]) -> Option<Vec<[Vec<f3
     )
 }
 
-/// Fetch a grid covering `view`. GFS is read straight from NOAA's GRIB files; the other models
-/// still come from Open-Meteo's multi-point API.
+/// Fetch a grid covering `view`, read from NOAA's own model files (never Open-Meteo). HRRR covers
+/// state- and region-size views of the continental U.S.; wider views, other models from older
+/// settings, or a missing HRRR file use NOAA GFS, and the grid's `model` says which one it is.
+/// Air quality is the one Open-Meteo layer: there is no NOAA or NWS source for it.
 pub async fn fetch(view: crate::config::GeoView, extended: bool, air: bool, model: GridModel) -> Result<WxGrid> {
     let bounds = grid_bounds(view);
-    // HRRR from NOAA covers state- and region-size views; wider views keep the Open-Meteo path.
-    if model.is_noaa() && noaa::fits(model, bounds) {
-        match noaa::fetch(bounds, model, view.zoom).await {
-            Ok(mut grid) => {
-                if model == GridModel::Hrrr {
-                    noaa::set_hrrr_from_noaa(true);
-                }
-                if air {
-                    noaa::add_air_quality(&mut grid).await;
-                }
-                return Ok(grid);
+    let wanted = effective_model(model, view, extended);
+    let mut grid = match noaa::fetch(bounds, wanted, view.zoom).await {
+        Ok(grid) => {
+            if wanted == GridModel::Hrrr {
+                noaa::set_hrrr_from_noaa(true);
             }
-            // HRRR from NOAA needs the updated relay: until it is deployed (or if NOAA is
-            // missing a file) HRRR keeps working through its previous path.
-            Err(e) if model == GridModel::Hrrr => {
-                noaa::set_hrrr_from_noaa(false);
-                log::warn!("NOAA HRRR grid: {e:#}; using the previous HRRR source");
-            }
-            Err(e) => return Err(e),
+            grid
         }
-    }
-    let (north, south, west, east) = bounds;
-    let points = node_points(bounds, NX, NY);
-    let mut tasks = Vec::new();
-    for chunk in points.chunks(CHUNK) {
-        let lats = chunk.iter().map(|p| format!("{:.3}", p.0)).collect::<Vec<_>>().join(",");
-        let lons = chunk.iter().map(|p| format!("{:.3}", p.1)).collect::<Vec<_>>().join(",");
-        let url = format!(
-            "https://api.open-meteo.com/v1/forecast?latitude={lats}&longitude={lons}&hourly={HOURLY}{}&forecast_hours={}&past_hours=1&temperature_unit=fahrenheit&wind_speed_unit=mph&precipitation_unit=inch&timeformat=unixtime&timezone=GMT{}",
-            if extended { format!(",{HOURLY_EXT}") } else { String::new() },
-            HOURS.min(model.max_hours() + 2),
-            model.api_id().map(|id| format!("&models={id}")).unwrap_or_default(),
-        );
-        tasks.push(net::spawn(async move {
-            let response = net::get_logged(&url, std::time::Duration::from_secs(40)).await?;
-            Ok::<serde_json::Value, anyhow::Error>(response.json().await?)
-        }));
-    }
-
-    let mut locations: Vec<serde_json::Value> = Vec::with_capacity(points.len());
-    for task in tasks {
-        let value = task.await.map_err(|e| anyhow!("grid task: {e}"))??;
-        match value {
-            serde_json::Value::Array(items) => locations.extend(items),
-            other => locations.push(other),
+        Err(e) if wanted == GridModel::Hrrr => {
+            noaa::set_hrrr_from_noaa(false);
+            log::warn!("NOAA HRRR grid: {e:#}; showing NOAA GFS instead");
+            noaa::fetch(bounds, GridModel::Gfs, view.zoom).await?
         }
-    }
-    if locations.len() != points.len() {
-        return Err(anyhow!("Open-Meteo returned {} of {} grid points", locations.len(), points.len()));
-    }
-
-    let times: Vec<i64> = locations[0]
-        .pointer("/hourly/time")
-        .and_then(|t| t.as_array())
-        .map(|a| a.iter().filter_map(|v| v.as_i64()).collect())
-        .unwrap_or_default();
-    let nt = times.len();
-    if nt == 0 {
-        return Err(anyhow!("Open-Meteo returned no hours"));
-    }
-
-    let mut data = vec![vec![0f32; nt * NY * NX]; VARS];
-    let air_ok = if air {
-        match air_quality(&points, &times).await {
-            Some(series) => {
-                for (p, [aqi, pm]) in series.into_iter().enumerate() {
-                    let (j, i) = (p / NX, p % NX);
-                    for t in 0..nt {
-                        data[Var::Aqi as usize][(t * NY + j) * NX + i] = aqi[t];
-                        data[Var::Pm25 as usize][(t * NY + j) * NX + i] = pm[t];
-                    }
-                }
-                true
-            }
-            None => false,
-        }
-    } else {
-        false
+        Err(e) => return Err(e),
     };
-    let series = |loc: &serde_json::Value, key: &str| -> Vec<f32> {
-        loc.pointer(&format!("/hourly/{key}"))
-            .and_then(|a| a.as_array())
-            .map(|a| a.iter().map(|v| v.as_f64().unwrap_or(0.0) as f32).collect())
-            .unwrap_or_else(|| vec![0.0; nt])
-    };
-    // A missing value (null) stays missing rather than becoming 0.
-    let optional = |loc: &serde_json::Value, keys: &[&str]| -> Vec<f32> {
-        keys.iter()
-            .filter_map(|key| loc.pointer(&format!("/hourly/{key}")).and_then(|a| a.as_array()))
-            .find(|a| a.iter().any(|v| v.is_number()))
-            .map(|a| a.iter().map(|v| v.as_f64().map_or(f32::NAN, |x| x as f32)).collect())
-            .unwrap_or_else(|| vec![f32::NAN; nt])
-    };
-    for (p, loc) in locations.iter().enumerate() {
-        let ext = if extended {
-            let mut ext: Vec<(Var, Vec<f32>)> = [
-                (Var::Cape, "cape"),
-                (Var::T850, "temperature_850hPa"),
-                (Var::Td850, "dew_point_850hPa"),
-                (Var::T700, "temperature_700hPa"),
-                (Var::T500, "temperature_500hPa"),
-                (Var::Z850, "geopotential_height_850hPa"),
-                (Var::Z500, "geopotential_height_500hPa"),
-                (Var::FreezingLevel, "freezing_level_height"),
-            ]
-            .into_iter()
-            .map(|(v, k)| (v, optional(loc, &[k])))
-            .collect();
-            // Open-Meteo gives vertical velocity in m/s (up positive). The map's scale is
-            // microbars per second, rising positive: -omega = rho * g * w, with rho ≈ 0.9 kg/m³
-            // at 700 mb, and 1 Pa/s = 10 µb/s.
-            ext.push((Var::Omega700, optional(loc, &["vertical_velocity_700hPa"]).into_iter().map(|w| w * 0.9 * 9.81 * 10.0).collect()));
-            // The first soil layer the model fills (GFS and GEM 0-10 cm, ICON 0 cm).
-            ext.push((Var::SoilTemp, optional(loc, &["soil_temperature_0_to_10cm", "soil_temperature_0cm"])));
-            ext.push((Var::SoilMoist, optional(loc, &["soil_moisture_0_to_10cm", "soil_moisture_0_to_1cm"])));
-            ext
-        } else {
-            Vec::new()
-        };
-        let node = NodeSeries {
-            temp: series(loc, "temperature_2m"),
-            rh: series(loc, "relative_humidity_2m"),
-            wind: series(loc, "wind_speed_10m"),
-            dir: series(loc, "wind_direction_10m"),
-            gust: series(loc, "wind_gusts_10m"),
-            pres: series(loc, "pressure_msl"),
-            cloud: series(loc, "cloud_cover"),
-            precip: series(loc, "precipitation"),
-            snow: series(loc, "snowfall"),
-            code: series(loc, "weather_code"),
-            ext,
-            ws850: if extended { series(loc, "wind_speed_850hPa") } else { Vec::new() },
-            wd850: if extended { series(loc, "wind_direction_850hPa") } else { Vec::new() },
-            ws500: if extended { series(loc, "wind_speed_500hPa") } else { Vec::new() },
-            wd500: if extended { series(loc, "wind_direction_500hPa") } else { Vec::new() },
-        };
-        fill_node(&mut data, (nt, NX, NY), (p / NX, p % NX), &node, extended);
+    if air {
+        noaa::add_air_quality(&mut grid).await;
     }
-
-    Ok(WxGrid {
-        north,
-        south,
-        west,
-        east,
-        nx: NX,
-        ny: NY,
-        times,
-        data,
-        fetched_at: chrono::Utc::now().timestamp(),
-        extended,
-        air: air_ok,
-        zoom: view.zoom,
-        model,
-        derived: Default::default(),
-        analysis: Default::default(),
-    })
+    Ok(grid)
 }
 
 // ---- Color ramps -----------------------------------------------------------------------------

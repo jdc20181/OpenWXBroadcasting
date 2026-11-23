@@ -35,7 +35,7 @@ where
 
 pub fn user_agent() -> String {
     let contact = crate::backend::contact();
-    let contact = if contact.is_empty() { "+https://github.com/jdc20181/OpenWX-Broadcasting".to_owned() } else { contact };
+    let contact = if contact.is_empty() { "+https://github.com/jdc20181/OpenWXBroadcasting".to_owned() } else { contact };
     format!("OpenWXBroadcasting/{APP_VERSION}+{} ({contact})", crate::config::APP_BUILD)
 }
 
@@ -225,6 +225,21 @@ fn host_of(url: &str) -> String {
     url.split("://").nth(1).and_then(|r| r.split('/').next()).unwrap_or(url).to_string()
 }
 
+/// Public files bigger than a relay may pass (older relays capped files at 8 MB): the SPC tornado database
+/// (about 9 MB) and full-detail WPC QPF contours (`f=json`, up to about 15 MB). Read directly.
+fn too_large_for_relay(url: &str) -> bool {
+    let Ok(parsed) = reqwest::Url::parse(url) else { return false };
+    let path = parsed.path();
+    match parsed.host_str() {
+        Some("www.spc.noaa.gov") => path.starts_with("/wcm/data/"),
+        Some("mapservices.weather.noaa.gov") => {
+            path.starts_with("/vector/rest/services/precip/wpc_qpf/")
+                && parsed.query_pairs().any(|(key, value)| key == "f" && value == "json")
+        }
+        _ => false,
+    }
+}
+
 /// GET with failures logged to the developer log.
 pub async fn get_logged(url: &str, timeout: Duration) -> Result<reqwest::Response> {
     static METEO_BACKOFF: AtomicI64 = AtomicI64::new(0);
@@ -235,9 +250,31 @@ pub async fn get_logged(url: &str, timeout: Duration) -> Result<reqwest::Respons
         return Err(RateLimit { host: host_of(url), retry_after: Duration::from_secs(remaining as u64) }.into());
     }
     let base = api_base().read().map(|b| b.clone()).unwrap_or_default();
-    let target = proxy_url(&base, url);
+    let target = if too_large_for_relay(url) { url.to_owned() } else { proxy_url(&base, url) };
     let started = std::time::Instant::now();
-    let result = match http().get(target).header("Accept", "*/*").timeout(timeout).send().await.inspect_err(|e| crate::devlog::http_unreachable(url, e)) {
+    let send = |address: &str| http().get(address).header("Accept", "*/*").timeout(timeout).send();
+    // Public NOAA/NWS feeds go through the relay, but the source is public: when the relay can't
+    // serve one (its size cap, a gateway error, no answer), read it directly. Open-Meteo stays
+    // relay-only (the relay keeps its request budget).
+    let fallback = target != url && !meteo;
+    let sent = match send(&target).await {
+        // 5xx: the relay or its gateway failed. 4xx (not 429): the relay refused the path, e.g.
+        // 400 "Unsupported weather feed path" for a NOAA endpoint its allow-list doesn't have yet.
+        Ok(response)
+            if fallback
+                && (response.status().is_server_error()
+                    || (response.status().is_client_error() && response.status() != reqwest::StatusCode::TOO_MANY_REQUESTS)) =>
+        {
+            crate::devlog::relay_fallback(url, &format!("answered {}", response.status()));
+            send(url).await
+        }
+        Err(error) if fallback => {
+            crate::devlog::relay_fallback(url, &format!("didn't answer ({error})"));
+            send(url).await
+        }
+        other => other,
+    };
+    let result = match sent.inspect_err(|e| crate::devlog::http_unreachable(url, e)) {
         Ok(response) => {
             if meteo && response.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
                 let seconds = retry_after(&response).as_secs() as i64;

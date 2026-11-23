@@ -159,6 +159,12 @@ pub fn http_failure_level(url: &str, status: reqwest::StatusCode, body: &str, op
     push(if serious { Level::Error } else { Level::Warn }, "http", message);
 }
 
+/// The relay couldn't serve a public feed, so the app read the source directly. A warning:
+/// the data still arrived.
+pub fn relay_fallback(direct_url: &str, relay_problem: &str) {
+    push(Level::Warn, "http", format!("relay {relay_problem}; read directly instead • {direct_url}"));
+}
+
 /// A request that never got a response (DNS, TLS, timeout, connection reset).
 pub fn http_unreachable(url: &str, error: &dyn std::fmt::Display) {
     push(Level::Error, "http", format!("no response • {url} • {error}"));

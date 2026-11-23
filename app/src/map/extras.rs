@@ -835,6 +835,23 @@ pub fn draw_hazard_shapes(pm: &mut Pixmap, glyphs: &mut GlyphCache, vp: &Viewpor
         "fire" => 0.55,
         _ => 0.7,
     };
+    // The national drought map is thousands of points: drawing it every frame held Program at
+    // about 13 fps. The finished layer is kept and reused until the view, size or data change.
+    type Cached = (String, usize, usize, [u64; 3], (u32, u32), Pixmap, Vec<(String, f32, f32)>);
+    static CACHE: std::sync::Mutex<Vec<Cached>> = std::sync::Mutex::new(Vec::new());
+    let view_key = [vp.view.lat.to_bits(), vp.view.lon.to_bits(), vp.view.zoom.to_bits()];
+    let size = (pm.width(), pm.height());
+    if let Ok(cache) = CACHE.lock() {
+        if let Some(c) = cache.iter().find(|c| c.0 == kind && c.1 == shapes.as_ptr() as usize && c.2 == shapes.len() && c.3 == view_key && c.4 == size) {
+            pm.draw_pixmap(0, 0, c.5.as_ref(), &tiny_skia::PixmapPaint { opacity, ..Default::default() }, Transform::identity(), None);
+            for (text, x, y) in &c.6 {
+                if on_screen(vp, *x, *y, 0.0) {
+                    halo_text(pm, glyphs, text, x + 10.0, *y, &label);
+                }
+            }
+            return;
+        }
+    }
     let Some(mut layer) = Pixmap::new(pm.width(), pm.height()) else { return };
     let mut order: Vec<&crate::hazards::Shape> = shapes.iter().collect();
     order.sort_by(|a, b| a.value.partial_cmp(&b.value).unwrap_or(std::cmp::Ordering::Equal));
@@ -851,10 +868,14 @@ pub fn draw_hazard_shapes(pm: &mut Pixmap, glyphs: &mut GlyphCache, vp: &Viewpor
         }
     }
     pm.draw_pixmap(0, 0, layer.as_ref(), &tiny_skia::PixmapPaint { opacity, ..Default::default() }, Transform::identity(), None);
-    for (text, x, y) in labels {
-        if on_screen(vp, x, y, 0.0) {
-            halo_text(pm, glyphs, &text, x + 10.0, y, &label);
+    for (text, x, y) in &labels {
+        if on_screen(vp, *x, *y, 0.0) {
+            halo_text(pm, glyphs, text, x + 10.0, *y, &label);
         }
+    }
+    if let Ok(mut cache) = CACHE.lock() {
+        cache.retain(|c| c.0 != kind);
+        cache.push((kind.to_owned(), shapes.as_ptr() as usize, shapes.len(), view_key, size, layer, labels));
     }
 }
 

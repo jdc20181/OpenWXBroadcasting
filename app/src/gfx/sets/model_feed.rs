@@ -472,9 +472,9 @@ mod tests {
                 };
                 assert_eq!(interval.time_interval.num_time_ranges, 1);
                 let range = &interval.time_interval.time_ranges[0];
-                assert_eq!(range.time_range.unit, 1);
+                assert_eq!(range.time_range.unit, grib::def::grib2::table::TimeRangeUnit(1));
                 assert_eq!(range.time_range.len, 1, "APCP must cover 0–1 h");
-                assert_eq!(range.time_increment.unit, 255);
+                assert_eq!(range.time_increment.unit, grib::def::grib2::table::TimeRangeUnit(255));
                 apcp_seen = true;
                 continue;
             }

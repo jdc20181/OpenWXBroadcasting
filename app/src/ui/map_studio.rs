@@ -1212,7 +1212,7 @@ impl MapStudio {
         cx.notify();
     }
 
-    fn on_scroll(&mut self, event: &ScrollWheelEvent, _window: &mut Window, cx: &mut Context<Self>) {
+    fn on_scroll(&mut self, event: &ScrollEvent, _window: &mut Window, cx: &mut Context<Self>) {
         if matches!(self.drag, Some(Drag::Raise { tracing: true, .. })) { return; }
         self.cancel_raise(cx);
         // A dialog (Settings, About...) sits over the map: its scrolling must not zoom the map.
@@ -1800,9 +1800,9 @@ impl MapStudio {
             .child(kv(format!("Outlook, {season_target}"), if loaded_season { season.to_string() } else { "Loading…".into() }))
             .child(row().flex_wrap().gap(px(4.)).child(muted("View")).children(zoom_chips))
             .child(muted(if issued.is_empty() {
-                "U.S. Drought Monitor (NDMC, USDA, NOAA) and NOAA Climate Prediction Center outlooks. Turn the radar off to show the drought legend on air.".to_string()
+                "U.S. Drought Monitor (NDMC, USDA, NOAA) and NOAA Climate Prediction Center outlooks.".to_string()
             } else {
-                format!("U.S. Drought Monitor (NDMC, USDA, NOAA); outlooks from NOAA CPC issued {issued}. Turn the radar off to show the drought legend on air.")
+                format!("U.S. Drought Monitor (NDMC, USDA, NOAA); outlooks from NOAA CPC issued {issued}.")
             }))
     }
 
@@ -4985,7 +4985,7 @@ impl Render for MapStudio {
                             .on_mouse_up_out(MouseButton::Left, cx.listener(|this, event: &MouseUpEvent, _, cx| {
                                 if matches!(this.drag, Some(Drag::Raise { tracing: true, .. })) { this.finish_raise(Some(event.position), cx); }
                             }))
-                            .on_scroll_wheel(cx.listener(Self::on_scroll)),
+                            .on_scroll(cx.listener(Self::on_scroll)),
                     )
                     .child(status)
                     .child(timeline),

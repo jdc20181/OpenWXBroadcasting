@@ -1560,7 +1560,9 @@ pub fn draw_onair(
         super::layers::draw_outlook_legend(pm, glyphs, brand, legend_off, scene.spc_day, &scene.spc_layer, scene.ero_day.is_some());
     } else if scene.show_legend && !scene.radar.enabled && !scene.satellite.enabled && scene.quakes {
         super::layers::draw_quake_legend(pm, glyphs, brand, legend_off, scene.quake_days, scene.quake_min);
-    } else if scene.show_legend && !scene.radar.enabled && !scene.satellite.enabled && scene.drought {
+    } else if scene.show_legend && scene.drought {
+        // Drought is switched on on purpose: its legend wins over the radar's, which stays on
+        // by default under it.
         super::layers::draw_drought_legend(pm, glyphs, brand, legend_off, &scene.drought_view);
     } else if scene.show_legend && site_radar {
         let site = scene.radar.resolved_site(scene.view.lat, scene.view.lon);

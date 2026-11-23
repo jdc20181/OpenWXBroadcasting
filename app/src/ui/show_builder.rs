@@ -1436,6 +1436,7 @@ impl ShowBuilder {
                                         if let Some(Scene { kind: SceneKind::Map { map }, .. }) = scene {
                                             this.app.update(cx, |s, cx| {
                                                 let view = map.view;
+                                                s.studio_map_before_show = None;
                                                 s.live = map;
                                                 s.set_view(view);
                                                 let overlay = s.live.overlay_graphic.clone();

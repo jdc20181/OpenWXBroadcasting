@@ -56,7 +56,7 @@ pub fn radial(cx: f32, cy: f32, r: f32, stops: &[(f32, Color)]) -> Paint<'static
     let st: Vec<GradientStop> = stops.iter().map(|(p, c)| GradientStop::new(*p, *c)).collect();
     let mut p = Paint::default();
     p.anti_alias = true;
-    match RadialGradient::new(Point::from_xy(cx, cy), Point::from_xy(cx, cy), r.max(0.5), st, SpreadMode::Pad, Transform::identity()) {
+    match RadialGradient::new(Point::from_xy(cx, cy), 0.0, Point::from_xy(cx, cy), r.max(0.5), st, SpreadMode::Pad, Transform::identity()) {
         Some(s) => p.shader = s,
         None => p.set_color(stops.first().map(|s| s.1).unwrap_or(Color::WHITE)),
     }

@@ -46,6 +46,7 @@ fn sky(top: (u8, u8, u8), bottom: (u8, u8, u8), accent: (u8, u8, u8, u8), seed: 
         p.anti_alias = true;
         p.shader = RadialGradient::new(
             Point::from_xy(cx, cy),
+            0.0,
             Point::from_xy(cx, cy),
             r,
             vec![

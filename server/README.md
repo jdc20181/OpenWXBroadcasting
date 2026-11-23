@@ -16,7 +16,7 @@ PCs should share one relay, or when you want to run it on hardware you already h
 On Debian, Ubuntu, Fedora, Raspberry Pi OS (64-bit) or any Linux with systemd:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jdc20181/OpenWX-Broadcasting/main/server/install.sh -o install.sh
+curl -fsSL https://raw.githubusercontent.com/jdc20181/OpenWXBroadcasting/main/server/install.sh -o install.sh
 sudo bash install.sh
 ```
 

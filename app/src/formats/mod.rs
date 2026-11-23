@@ -728,7 +728,7 @@ fn checksum(path: &Path) -> Result<String> {
         }
         hash.update(&buffer[..n]);
     }
-    Ok(format!("sha256:{:x}", hash.finalize()))
+    Ok(format!("sha256:{}", hash.finalize().iter().map(|b| format!("{b:02x}")).collect::<String>()))
 }
 
 pub fn data_dir() -> PathBuf {

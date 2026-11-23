@@ -151,7 +151,7 @@ const FIELD_LABELS: [&str; TEXT_FIELDS] = [
     "Home longitude",
     "Hosted relay address (https://your-server/t/access-token)",
     "NWS alert area (blank = all US, or IN,KY,IL)",
-    "Update feed URL",
+    "Updates from (GitHub repository, or a latest.json feed URL)",
     "Primary color",
     "Secondary color",
     "Alert color",

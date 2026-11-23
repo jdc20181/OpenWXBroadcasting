@@ -20,7 +20,7 @@
 
 set -euo pipefail
 
-REPO="jdc20181/OpenWX-Broadcasting"
+REPO="jdc20181/OpenWXBroadcasting"
 APP_USER="openwx"
 BIN_DIR="/opt/openwx/bin"
 BIN="$BIN_DIR/openwx-relay"

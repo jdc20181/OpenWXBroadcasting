@@ -224,7 +224,29 @@ fn open_default() -> Option<rodio::MixerDeviceSink> {
     }
 }
 
-fn open_stream(name: &str) -> Option<rodio::MixerDeviceSink> {
+/// An opened output: the device, plus the bus every player connects to. The bus runs through a
+/// peak limiter before the device, so several buses at once (show bed + scene audio + alert tone)
+/// or a volume above 100% never clip, which was heard as harsh, distorted audio.
+struct Output {
+    _device: rodio::MixerDeviceSink,
+    bus: rodio::mixer::Mixer,
+}
+
+fn limited(device: rodio::MixerDeviceSink) -> Output {
+    use rodio::Source;
+    let (channels, rate) = (device.config().channel_count(), device.config().sample_rate());
+    let (bus, mix) = rodio::mixer::mixer(channels, rate);
+    // A silent source keeps the bus alive between tracks (an empty mixer ends and detaches).
+    bus.add(rodio::source::Zero::new(channels, rate));
+    device.mixer().add(mix.limit(rodio::source::LimitSettings::broadcast()));
+    Output { _device: device, bus }
+}
+
+fn open_stream(name: &str) -> Option<Output> {
+    open_device_by_name(name).map(limited)
+}
+
+fn open_device_by_name(name: &str) -> Option<rodio::MixerDeviceSink> {
     let host = rodio::cpal::default_host();
     let device = if name.is_empty() { None } else { host.output_devices().ok()?.find(|d| d.description().map(|d| d.name() == name).unwrap_or(false)) };
     match device {
@@ -269,7 +291,7 @@ fn decode_file(path: &std::path::Path) -> Option<rodio::Decoder<std::io::Cursor<
 fn audio_thread(rx: mpsc::Receiver<Cmd>) {
     let (mut program_name, mut alert_name) = (String::new(), String::new());
     let mut program = open_stream("");
-    let mut alert: Option<rodio::MixerDeviceSink> = None;
+    let mut alert: Option<Output> = None;
     let mut sinks: Vec<(Bus, rodio::Player, f32)> = Vec::new();
     let mut ducked = false;
     let mut presentation_muted = false;
@@ -315,7 +337,7 @@ fn audio_thread(rx: mpsc::Receiver<Cmd>) {
                         *b != bus
                     });
                 }
-                let sink = rodio::Player::connect_new(stream.mixer());
+                let sink = rodio::Player::connect_new(&stream.bus);
                 sink.set_volume(0.0);
                 if delay_ms > 0 {
                     use rodio::Source;
@@ -550,5 +572,20 @@ mod tests {
         }
         eprintln!("{} tracks; formats (rate, channels): {formats:?}", files.len());
         assert!(failed.is_empty(), "tracks that don't decode cleanly:\n{}", failed.join("\n"));
+    }
+
+    /// Two buses at full level plus 200% volume would peak near 4.0 (hard clipping); the limited
+    /// bus keeps every sample at or below full scale.
+    #[test]
+    fn bus_limiter_prevents_clipping() {
+        use rodio::Source;
+        let (ch, rate) = (std::num::NonZero::new(2).unwrap(), std::num::NonZero::new(48_000).unwrap());
+        let (bus, mix) = rodio::mixer::mixer(ch, rate);
+        bus.add(rodio::source::SineWave::new(220.0).amplify(2.0).take_duration(Duration::from_secs(1)));
+        bus.add(rodio::source::SineWave::new(330.0).amplify(2.0).take_duration(Duration::from_secs(1)));
+        let samples: Vec<f32> = mix.limit(rodio::source::LimitSettings::broadcast()).collect();
+        // Skip the 3 ms attack, then everything must sit under 0 dBFS.
+        let peak = samples.iter().skip(48_000 * 2 / 50).fold(0.0f32, |m, s| m.max(s.abs()));
+        assert!(peak <= 1.0, "peak {peak}");
     }
 }

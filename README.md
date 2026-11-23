@@ -8,7 +8,7 @@ Weather Service. Made for small teams, volunteers and weather enthusiasts who wa
 professional-looking coverage without a TV station's budget or an IT department.
 
 > **Status: early alpha.** Expect rough edges.
-
+> **Releases** [See Releases for latest version](https://github.com/jdc20181/OpenWXBroadcasting/releases)
 > OpenWX is **not an official warning source**. For life-safety decisions, follow the National
 > Weather Service and your local emergency management.
 

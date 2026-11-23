@@ -226,6 +226,13 @@ pub struct AppState {
     scene_started: Instant,
     /// Show clock frozen this many seconds into the scene (Show tab transport pause).
     pub scene_paused: Option<f32>,
+    /// Map Studio's own map from before a show scene took the map (going to a map scene replaces
+    /// the live map). It comes back when the user returns to Map Studio with the show stopped.
+    pub studio_map_before_show: Option<MapScene>,
+    /// The workspace on the last tick (to notice the user coming back to Map Studio).
+    last_workspace: Workspace,
+    /// Recordings being finished in the background (encoder drain, sound mix).
+    finishing_recordings: Vec<std::sync::mpsc::Receiver<anyhow::Result<std::path::PathBuf>>>,
     scene_forecast_wait_until: Option<Instant>,
     pending_clip: Option<PendingClip>,
     clip_duration: Option<f32>,
@@ -437,6 +444,9 @@ impl AppState {
             show_running: false,
             scene_started: Instant::now(),
             scene_paused: None,
+            studio_map_before_show: None,
+            last_workspace: Workspace::Map,
+            finishing_recordings: Vec::new(),
             scene_forecast_wait_until: None,
             pending_clip: None,
             clip_duration: None,
@@ -940,7 +950,7 @@ impl AppState {
         let air = self.settings.air_quality || field.is_some_and(crate::map::scene::DataField::needs_air);
         let fresh = self.data.grid.as_ref().map(|g| {
             g.covers(view) && chrono::Utc::now().timestamp() - g.fetched_at < 60 * 60
-                && g.model == model && (g.extended || !extended) && (g.air || !air)
+                && g.model == crate::grid::effective_model(model, view, extended) && (g.extended || !extended) && (g.air || !air)
         });
         if fresh == Some(true) {
             return;
@@ -953,7 +963,7 @@ impl AppState {
             }
         }
         self.grid_loading = true;
-        self.toast(ToastKind::Info, format!("Loading {} model data for this view…", model.label()));
+        self.toast(ToastKind::Info, format!("Loading {} model data for this view…", crate::grid::effective_model(model, view, extended).label()));
         cx.spawn(async move |this, cx| {
             let result = net::spawn(crate::grid::fetch(view, extended, air, model)).await;
             let _ = this.update(cx, |state, cx| {
@@ -1549,6 +1559,9 @@ impl AppState {
                 let target = map.view;
                 let current = self.live.view;
                 let was_replaying = self.live.is_radar_replay();
+                if self.studio_map_before_show.is_none() {
+                    self.studio_map_before_show = Some(self.live.clone());
+                }
                 self.live = map;
                 if self.live.radar_replay.is_some() || self.live.site_replay.is_some() {
                     self.playing = self.live.site_replay.as_ref().is_none_or(|replay| replay.scans.len() > 1);
@@ -1717,6 +1730,25 @@ impl AppState {
         }
     }
 
+    /// Coming back to Map Studio with the show stopped (not paused): put the user's own map back.
+    /// Only on the way in, so a show that ends while Map Studio is open doesn't change air.
+    fn restore_studio_map(&mut self) {
+        let entered = self.workspace == Workspace::Map && self.last_workspace != Workspace::Map;
+        self.last_workspace = self.workspace;
+        if !entered || self.show_running || self.scene_paused.is_some() || self.exporting_show {
+            return;
+        }
+        let Some(map) = self.studio_map_before_show.take() else { return };
+        let view = map.view;
+        self.live = map;
+        self.fly = None;
+        self.set_view(view);
+        let overlay = self.live.overlay_graphic.clone();
+        self.set_map_overlay(overlay);
+        self.sync_map();
+        self.toast(ToastKind::Info, "Map Studio is back on your map from before the show");
+    }
+
     /// Pause the running show where it is (the scene stays on air).
     pub fn pause_show(&mut self) {
         self.scene_paused = Some(self.scene_elapsed());
@@ -1816,6 +1848,7 @@ impl AppState {
     }
 
     pub fn tick(&mut self) -> bool {
+        self.restore_studio_map();
         self.sync_show_bed();
         // Pause the map engine and compositor while nothing on screen uses them.
         let idle = !self.frames_needed();
@@ -1940,6 +1973,31 @@ impl AppState {
             self.exporting_show = false;
             if self.recording.is_some() {
                 self.toggle_recording();
+            }
+            changed = true;
+        }
+
+        // Recordings finishing in the background.
+        let mut finished = Vec::new();
+        self.finishing_recordings.retain(|rx| match rx.try_recv() {
+            Ok(result) => {
+                finished.push(result);
+                false
+            }
+            Err(std::sync::mpsc::TryRecvError::Empty) => true,
+            Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                finished.push(Err(anyhow::anyhow!("the recording stopped unexpectedly")));
+                false
+            }
+        });
+        for result in finished {
+            match result {
+                Ok(path) => {
+                    let name = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+                    self.toast(ToastKind::Success, format!("Recording saved: {name}"));
+                    self.exports = library::list_exports();
+                }
+                Err(e) => self.toast(ToastKind::Error, format!("Recording failed: {e}")),
             }
             changed = true;
         }
@@ -2387,19 +2445,10 @@ impl AppState {
 
     pub fn toggle_recording(&mut self) {
         if let Some(recording) = self.recording.take() {
-            match recording.stop(&self.compositor) {
-                Ok(path) => {
-                    self.toast(
-                        ToastKind::Success,
-                        format!(
-                            "Recording saved: {}",
-                            path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default()
-                        ),
-                    );
-                    self.exports = library::list_exports();
-                }
-                Err(e) => self.toast(ToastKind::Error, format!("Recording failed: {e}")),
-            }
+            // Finished off the UI thread: a long show used to freeze the app here, and closing
+            // it while frozen left a broken MP4.
+            self.finishing_recordings.push(recording.stop_in_background(&self.compositor));
+            self.toast(ToastKind::Info, "Finishing the video… keep the app open until it says it's saved");
         } else {
             match Recording::start(
                 &self.compositor,
@@ -2424,8 +2473,9 @@ impl AppState {
         }
         self.update = UpdateState::Checking;
         let feed = self.settings.update_feed_for_channel();
+        let beta = self.settings.update_beta();
         cx.spawn(async move |this, cx| {
-            let result = net::spawn(updater::check(feed)).await;
+            let result = net::spawn(updater::check(feed, beta)).await;
             let _ = this.update(cx, |state, cx| {
                 state.update = match result {
                     Ok(Ok(Some(manifest))) => {

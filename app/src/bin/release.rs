@@ -2,13 +2,15 @@
 //!
 //! ```text
 //! cargo run --bin openwx-release -- bump            # next build number (MMDDYYYY + build of the day)
-//! cargo run --release --bin openwx-release -- <installer.exe> <download-base-url> [notes.md]
+//! cargo run --release --bin openwx-release -- <installer.exe> <release-tag | download-base-url> [notes.md]
 //! ```
 //! The feed carries `version` and `build`; the app updates when either is newer.
 //! cargo run --bin openwx-release -- keygen          # make the update-signing key pair (once)
 //! Signing key: `%USERPROFILE%\.tauri\openwx-broadcaster.key` (override with OPENWX_SIGNING_KEY),
 //! password from OPENWX_SIGNING_PASSWORD (empty by default). Upload the installer to
-//! `<download-base-url>/<installer name>` and `dist/latest.json` to the update feed URL.
+//! `<download-base-url>/<installer name>` and `dist/latest.json` to the update feed URL. With a release
+//! tag (e.g. `0.1.2`) the download base is that GitHub release on jdc20181/OpenWXBroadcasting:
+//! upload the installer and `dist/latest.json` to it.
 
 use std::{io::Cursor, path::PathBuf};
 
@@ -82,10 +84,15 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     }
     if args.len() < 2 {
-        return Err("usage: openwx-release bump | openwx-release <installer.exe> <download-base-url> [notes.md]".into());
+        return Err("usage: openwx-release bump | openwx-release <installer.exe> <release-tag | download-base-url> [notes.md]".into());
     }
     let installer = PathBuf::from(&args[0]);
-    let base_url = args[1].trim_end_matches('/').to_string();
+    // A bare tag means the GitHub release of that name.
+    let base_url = if args[1].starts_with("http") {
+        args[1].trim_end_matches('/').to_string()
+    } else {
+        format!("https://github.com/jdc20181/OpenWXBroadcasting/releases/download/{}", args[1])
+    };
     let notes = match args.get(2) {
         Some(path) => std::fs::read_to_string(path)?,
         None => latest_changelog_section(),
@@ -142,21 +149,36 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-/// The newest section of CHANGELOG.md, used as release notes by default.
+/// The newest non-empty section of CHANGELOG.md, used as release notes by default. An empty
+/// "## Unreleased" heading is skipped. The file is read from disk when run from the repo root,
+/// so notes written after this tool was built are still picked up.
 fn latest_changelog_section() -> String {
-    let text = include_str!("../../../CHANGELOG.md");
-    let mut out = Vec::new();
-    let mut in_section = false;
+    let text = std::fs::read_to_string("CHANGELOG.md").unwrap_or_else(|_| include_str!("../../../CHANGELOG.md").to_string());
+    newest_section(&text)
+}
+
+fn newest_section(text: &str) -> String {
+    let mut out: Vec<&str> = Vec::new();
     for line in text.lines() {
         if line.starts_with("## ") {
-            if in_section {
+            if out.iter().skip(1).any(|l| !l.trim().is_empty()) {
                 break;
             }
-            in_section = true;
+            out.clear();
         }
-        if in_section {
+        if !out.is_empty() || line.starts_with("## ") {
             out.push(line);
         }
     }
-    out.join("\n")
+    out.join("\n").trim_end().to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn empty_unreleased_is_skipped() {
+        let text = "# Changelog\n\n## Unreleased\n\n## v1 build 2\n\n- fixed a thing\n\n## v0\n\n- old\n";
+        assert_eq!(super::newest_section(text), "## v1 build 2\n\n- fixed a thing");
+        assert_eq!(super::newest_section("## Unreleased\n\n- next\n\n## v1\n- a\n"), "## Unreleased\n\n- next");
+    }
 }

@@ -4,7 +4,7 @@ Source: CrowdedWX Broadcaster v0.1.8 (Rust, GPUI desktop app) plus the relay rou
 the Dubois County Weather site (`src/routes/weatherbroadcaster.js`). The fork lives in this
 folder. Nothing is published until every gate below passes.
 
-Repository: https://github.com/jdc20181/OpenWX-Broadcasting (private until public release).
+Repository: https://github.com/jdc20181/OpenWXBroadcasting (public, early alpha).
 
 ## Progress (2026-11-17)
 
