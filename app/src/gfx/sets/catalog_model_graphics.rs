@@ -40,6 +40,8 @@ enum Metric {
 include!("catalog_model_graphics_palette.rs");
 include!("catalog_model_graphics_fields.rs");
 include!("catalog_model_graphics_diagnostics.rs");
+include!("catalog_model_graphics_additional.rs");
+include!("catalog_model_graphics_ensemble.rs");
 
 #[derive(Serialize, Deserialize)]
 struct Input {
@@ -58,6 +60,82 @@ fn layout(s: Spec) -> Layout {
 }
 fn is_loop(s: Spec) -> bool {
     s.view == "Animated loop"
+}
+// These headings share the Classic band with the run caption. Restrict the
+// repair to new field families and the two independently documented NAM defects.
+fn separate_header_caption(s: Spec) -> bool {
+    if ensemble_metric(s.metric) { return true; }
+    remaining670_heading(s) || continuation500_heading(s) || diagnostic_style(s.metric).is_some()
+        || matches!((s.model, s.metric),
+            ("NAM 12 km" | "NAM 3 km", "Simulated radar")
+            | ("ECMWF IFS", "2 m temperature" | "Dew point" | "Wind gusts" | "Total cloud cover" | "10 m wind" | "Mean sea level pressure" | "CAPE" | "Total precipitation")
+            | ("Canadian GDPS", "2 m temperature" | "Dew point" | "Wind gusts" | "10 m wind" | "Total cloud cover" | "Mean sea level pressure" | "CAPE"))
+}
+// Newly registered model families keep the Classic run caption separate.
+fn continuation500_heading(s: Spec) -> bool {
+    matches!((s.model, s.metric),
+        ("Canadian GDPS", "Daily high")
+        | ("Canadian GDPS", "Daily low")
+        | ("Canadian GDPS", "Feels like")
+        | ("Canadian GDPS", "Precipitation type")
+        | ("Canadian GDPS", "Total precipitation")
+        | ("ECMWF IFS", "250 mb jet stream")
+        | ("ECMWF IFS", "850 mb temperature")
+        | ("ECMWF IFS", "Daily high")
+        | ("ECMWF IFS", "Daily low")
+        | ("ECMWF IFS", "Feels like")
+        | ("ECMWF IFS", "Freezing rain accumulation")
+        | ("ECMWF IFS", "Ground (soil) temperature")
+        | ("ECMWF IFS", "Precipitable water")
+        | ("ECMWF IFS", "Precipitation type")
+        | ("ECMWF IFS", "Simulated radar")
+        | ("ECMWF IFS", "Snowfall 10:1")
+        | ("ECMWF IFS", "Snowfall Kuchera")
+        | ("ECMWF ensemble", "Precipitation mean")
+        | ("ECMWF ensemble", "Probability of 1 in rain")
+        | ("ECMWF ensemble", "Probability of 1 in snow")
+        | ("ECMWF ensemble", "Probability of 6 in snow")
+    )
+}
+// Newly registered model families keep the Classic run caption separate.
+fn remaining670_heading(s: Spec) -> bool {
+    matches!((s.model, s.metric),
+        ("Canadian GDPS", "250 mb jet stream")
+        | ("Canadian GDPS", "850 mb temperature")
+        | ("Canadian GDPS", "Freezing rain accumulation")
+        | ("Canadian GDPS", "Ground (soil) temperature")
+        | ("Canadian GDPS", "Precipitable water")
+        | ("Canadian GDPS", "Simulated radar")
+        | ("Canadian GDPS", "Snowfall 10:1")
+        | ("Canadian GDPS", "Snowfall Kuchera")
+        | ("Canadian GDPS", "Total precipitation")
+        | ("HREF", "Neighbourhood max reflectivity")
+        | ("HRRR", "Cloud ceiling")
+        | ("HRRR", "Echo tops")
+        | ("HRRR", "Lightning threat")
+        | ("HRRR", "Max hail size")
+        | ("HRRR", "Significant tornado parameter")
+        | ("HRRR", "Smoke (near surface)")
+        | ("HRRR", "Supercell composite")
+        | ("HRRR", "Updraft helicity")
+        | ("NAM 3 km", "Cloud ceiling")
+        | ("NAM 3 km", "Echo tops")
+        | ("NAM 3 km", "Lightning threat")
+        | ("NAM 3 km", "Max hail size")
+        | ("NAM 3 km", "Significant tornado parameter")
+        | ("NAM 3 km", "Smoke (near surface)")
+        | ("NAM 3 km", "Supercell composite")
+        | ("NAM 3 km", "Updraft helicity")
+        | ("NBM", "Snow level")
+        | ("RRFS", "Cloud ceiling")
+        | ("RRFS", "Echo tops")
+        | ("RRFS", "Lightning threat")
+        | ("RRFS", "Max hail size")
+        | ("RRFS", "Significant tornado parameter")
+        | ("RRFS", "Smoke (near surface)")
+        | ("RRFS", "Supercell composite")
+        | ("RRFS", "Updraft helicity")
+    )
 }
 fn prefix(s: Spec) -> String {
     format!(
@@ -306,6 +384,8 @@ fn extended_style(metric: &str) -> Option<(String, Palette, Vec<Band>)> {
 }
 
 fn style(metric: &str) -> (String, Palette, Vec<Band>) {
+    if ensemble_metric(metric) { return (format!("{metric} • Supplied fields and units"), Palette::Category, Vec::new()); }
+    if let Some(style) = additional_model_style(metric) { return style; }
     if let Some(style) = diagnostic_style(metric) {
         return style;
     }
@@ -472,7 +552,7 @@ fn default_pairs(settings: &Settings) -> DefaultPairs {
             };
             pairs.push((
                 format!("{p}.{field}"),
-                serde_json::to_string(&empty_input_scoped(s, scope.clone(), frame)).unwrap(),
+                if ensemble_metric(s.metric) { serde_json::to_string(&ensemble_empty(s,scope.clone())).unwrap() } else { serde_json::to_string(&empty_input_scoped(s, scope.clone(), frame)).unwrap() },
             ));
         }
     }
@@ -610,8 +690,8 @@ pub(super) fn build(key: &str) -> Option<GraphicDoc> {
     );
     for l in &mut d.layers {
         // The Classic title and run caption share one band. Keep separate boxes
-        // for the new diagnostic headings even with a wider station font.
-        if !s.portrait && diagnostic_style(s.metric).is_some() && l.name == "Title" {
+        // for bounded model headings even with a wider station font.
+        if !s.portrait && separate_header_caption(s) && l.name == "Title" {
             l.w = 980.;
         }
         if let LayerKind::Text { auto_fit, wrap, .. } = &mut l.kind {
@@ -646,6 +726,7 @@ pub(super) fn draw(
     let Some(&s) = SPECS.iter().find(|s| s.key == key) else {
         return true;
     };
+    if ensemble_metric(s.metric) { return ensemble_draw(pm,g,local,mask,w,h,raw,s,opacity,font); }
     let valid = if raw.len() <= 1_000_000 {
         serde_json::from_str::<Input>(raw).ok()
     } else {
@@ -661,9 +742,18 @@ pub(super) fn draw(
         .map(|p| p.scene)
         .unwrap_or_else(|| board::empty(layout(s)));
     let (title, palette, legend) = style(s.metric);
-    sc.legend_title = title;
-    sc.palette = palette;
-    sc.legend = legend;
+    if additional_model_style(s.metric).is_some() {
+        // These definitions vary by approved product. Keep the supplied legend;
+        // require it explicitly instead of inventing severe/aviation thresholds.
+        if sc.reviewed && (sc.palette != Palette::Category || sc.legend.is_empty()
+            || !sc.legend_title.contains(&title)) {
+            sc = empty_input(s, &Settings::default(), 0).scene;
+        }
+    } else {
+        sc.legend_title = title;
+        sc.palette = palette;
+        sc.legend = legend;
+    }
     let board_spec = format!(
         "set:board:{}:{}",
         layout(s).key(),
@@ -681,10 +771,16 @@ fn sample_with_settings(d: &mut GraphicDoc, settings: &Settings) {
     let Some(&s) = SPECS.iter().find(|s| Some(s.key) == d.template.as_deref()) else {
         return;
     };
+    if ensemble_metric(s.metric) { ensemble_sample(d,s,settings); return; }
     let all = crate::map::boundaries::counties_named().expect("existing geographic cache");
     for frame in 0..if is_loop(s) { 4 } else { 1 } {
         let mut p = empty_input(s, settings, frame);
         p.scene.reviewed = true;
+        if additional_model_style(s.metric).is_some() {
+            let (title, legend) = sample_defined_legend(s.metric);
+            p.scene.legend_title = title;
+            p.scene.legend = legend;
+        }
         p.scene.legend_title = format!("SAMPLE • {}", p.scene.legend_title);
         let n = board::bands(&p.scene).len();
         let selected = board::selected(&all, &p.scene.scope);
@@ -789,7 +885,11 @@ mod tests {
         assert!(style("700 mb vertical motion").0.contains("Negative = rising"));
         assert!(style("500 mb height anomaly").0.contains("Supplied baseline"));
         assert!(style("Visibility").2[0].label.contains("0.25 mi"));
-        for &s in SPECS.iter().filter(|s| !s.portrait && diagnostic_style(s.metric).is_some()) {
+        let fog = diagnostic_style("Visibility (fog)").expect("fog visibility has mile categories");
+        assert!(fog.0.contains("mi"));
+        assert_eq!(fog.2[0].label, style("Visibility").2[0].label);
+        assert_ne!(fog.0, style("2 m temperature").0);
+        for &s in SPECS.iter().filter(|s| !s.portrait && separate_header_caption(**s)) {
             let d = build(s.key).unwrap();
             let title = d.layers.iter().find(|l| l.name == "Title").unwrap();
             let caption = d.layers.iter().find(|l| l.name == "Header right").unwrap();
@@ -844,7 +944,7 @@ mod tests {
     #[test]
     fn variants_are_unique_native_and_inputs_are_missing_by_default() {
         let mut keys = std::collections::HashSet::new();
-        assert_eq!(SPECS.len(), 2552);
+        assert_eq!(SPECS.len(), 4674);
         for &s in SPECS {
             assert!(keys.insert(s.key));
             let d = build(s.key).unwrap();
@@ -1010,6 +1110,14 @@ mod tests {
                     } else {
                         "payload".into()
                     };
+                    if ensemble_metric(s.metric) {
+                        let raw=b.get(&format!("{}.{field}",prefix(s))).expect("ensemble default");
+                        let input:EnsembleInput=serde_json::from_str(raw).unwrap();
+                        assert!(!input.reviewed && input.frames.is_empty());
+                        assert_eq!((input.model.as_str(),input.metric.as_str(),input.scope_name.as_str()),(s.model,s.metric,s.scope));
+                        assert_eq!(serde_json::to_string(&input.scope).unwrap(),serde_json::to_string(&geo_scope(s,&settings)).unwrap());
+                        continue;
+                    }
                     let expected =
                         serde_json::to_string(&empty_input(s, &settings, frame)).unwrap();
                     assert_eq!(
@@ -1025,12 +1133,12 @@ mod tests {
         let Ok(dir) = std::env::var("CWX_QA_NEW_DIR") else {
             return;
         };
-        let selected = std::env::var("CWX_QA_SET_KEYS").unwrap_or_default();
+        let selected = super::super::qa_selection::selected();
         let out = std::path::PathBuf::from(dir).join("bulk-model-phases");
         std::fs::create_dir_all(&out).unwrap();
         for s in SPECS
             .iter()
-            .filter(|s| is_loop(**s) && selected.split(',').any(|k| k == s.key))
+            .filter(|s| is_loop(**s) && selected.as_ref().is_some_and(|keys| keys.contains(s.key)))
         {
             for look in ["modern", "classic"] {
                 let mut d = crate::gfx::templates::build_in(s.key, look).unwrap();
@@ -1051,5 +1159,40 @@ mod tests {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod additional_input_tests {
+    use super::*;
+    #[test]
+    fn additional_sample_legends_define_fields_and_units() {
+        for &s in SPECS.iter().filter(|s|additional_model_style(s.metric).is_some()) {
+            let (title, bands)=sample_defined_legend(s.metric);
+            assert!(title.contains('•'), "{} needs field units", s.metric);
+            assert_eq!(bands.len(),8);
+            assert!(bands.iter().all(|b|!b.label.contains("bin")&&!b.label.contains("SAMPLE")));
+            let mut d=build(s.key).unwrap();sample(&mut d);
+            let raw=&d.data_overrides.iter().find(|(k,_)|k==&format!("{}.{}",prefix(s),if is_loop(s){"payload_0"}else{"payload"})).unwrap().1;
+            let input:Input=serde_json::from_str(raw).unwrap();
+            assert_eq!(input.scene.legend_title,format!("SAMPLE • {title}"));
+        }
+    }
+    #[test]
+    fn all_new_ensemble_and_scalar_sample_payloads_are_usable() {
+        let mut failures=Vec::new();
+        for &s in SPECS.iter().filter(|s|ensemble_metric(s.metric)||additional_model_style(s.metric).is_some()) {
+            let mut d=build(s.key).unwrap();sample(&mut d);
+            for frame in 0..if is_loop(s){4}else{1} {
+                let field=if is_loop(s){format!("payload_{frame}")}else{"payload".into()};
+                let key=format!("{}.{field}",prefix(s));let raw=&d.data_overrides.iter().find(|(k,_)|k==&key).unwrap().1;
+                let valid=if ensemble_metric(s.metric) {serde_json::from_str::<EnsembleInput>(raw).ok().is_some_and(|p|ensemble_valid(s,&p))}else{
+                    serde_json::from_str::<Input>(raw).ok().is_some_and(|p|p.model==s.model&&p.metric==s.metric&&scope_matches(s,&p.scene.scope)
+                        &&p.scene.reviewed&&!p.scene.legend.is_empty()&&board::parse(&serde_json::to_string(&p.scene).unwrap(),layout(s)).is_some())
+                };
+                if !valid{failures.push(format!("{} frame{}",s.key,frame));}
+            }
+        }
+        assert!(failures.is_empty(),"{} rejected model fixtures: {:?}",failures.len(),&failures[..failures.len().min(25)]);
     }
 }

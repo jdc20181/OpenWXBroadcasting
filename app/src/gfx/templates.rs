@@ -967,3 +967,19 @@ mod diagram_qa {
         eprintln!("rendered {found:?}");
     }
 }
+
+#[cfg(test)]
+mod holiday_catalog_tests {
+    /// The designed Holidays cards must stay in Graphics Studio; only the plain holiday-forecast
+    /// panels are hidden (owner, 2026-11-20 and 2026-11-23).
+    #[test]
+    fn designed_holiday_cards_stay_in_catalog() {
+        let designed: Vec<&str> = super::all().filter(|t| t.category == "Holidays" && t.key.starts_with("holiday_")).map(|t| t.key).collect();
+        for key in ["holiday_new_year", "holiday_valentines", "holiday_easter", "holiday_independence", "holiday_halloween", "holiday_thanksgiving", "holiday_christmas_eve", "holiday_christmas", "holiday_new_years_eve"] {
+            assert!(designed.contains(&key), "{key} is missing from Graphics Studio");
+            assert!(super::build(key).is_some(), "{key} doesn't build");
+        }
+        assert!(designed.len() >= 18, "only {} designed holiday cards", designed.len());
+        assert!(super::all().all(|t| !t.key.starts_with("set_holiday_forecast__")), "plain holiday panels are back in the catalog");
+    }
+}

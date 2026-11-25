@@ -2,6 +2,32 @@
 
 ## Unreleased
 
+## v0.1.3 build 112520261 · November 25, 2026 · alpha
+
+Linux and macOS builds, the microphone off by default, NOAA-only Winter Studio, quieter logs,
+and the graphics from CrowdedWX build 112420261.
+
+### New
+
+- **Linux and macOS (best effort):** OpenWX builds for Linux (.AppImage and .deb) and macOS (.dmg,
+  not from the App Store; approve it once in Privacy & Security). On Linux and macOS the app tells
+  you when an update is out and opens the download page; Windows still installs updates itself.
+- **Graphics from CrowdedWX build 112420261:** more model graphics (ensembles and extra fields),
+  reference tables, and the full graphics catalog, so OpenWX now has the same 11,487 graphics set
+  entries as CrowdedWX. Many catalog entries don't have a data feed hooked up yet and show "Data
+  not available yet"; those are being filled in next. Sample text uses made-up place names.
+
+### Fixed
+
+- **The microphone is off until you turn it on:** Settings > Audio has an "Off (not listening)"
+  choice, which is the default. Picking a microphone turns it on.
+- **Winter Studio reads NOAA only:** snow and ice come from HRRR where it covers your area,
+  otherwise GFS. The model comparison shows GFS and HRRR.
+- **Fewer repeated warnings:** a feed the relay won't serve is read directly for the rest of the
+  session and noted once in the log, instead of a warning for every station and map tile.
+- **Airport delays** are read straight from the FAA when the relay can't get them.
+- **Stations with no recent report** no longer fill the log with warnings.
+
 ## v0.1.2 build 112320262 · November 23, 2026 · alpha
 
 Second build of the day: the fixes from CrowdedWX build 112320261.

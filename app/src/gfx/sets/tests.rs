@@ -2,7 +2,7 @@ use super::*;
 use crate::gfx::{check::PreviewData, model::LayerKind};
 use chrono::NaiveDate;
 
-fn sample(doc: &mut GraphicDoc) {
+pub(super) fn sample(doc: &mut GraphicDoc) {
     comparison::sample(doc);
     mesoscale::sample(doc);
     river_crest::sample(doc);
@@ -10,6 +10,7 @@ fn sample(doc: &mut GraphicDoc) {
     show_ident::sample(doc);
     show_schedule::sample(doc);
     sponsor_cards::sample(doc);
+    catalog_completion::sample(doc);
     catalog_model_graphics::sample(doc);
     community_feature_cards::sample(doc);
     producer_story_cards::sample(doc);
@@ -216,7 +217,10 @@ fn registry_builds_unique_templates_and_renders_both_looks() {
     // key, look, fixture and state; the full-resolution visual gate is unchanged.
     let settings = Settings::default();
     let data = WxSnapshot::default();
-    for info in TEMPLATES {
+    for (index, info) in TEMPLATES.iter().enumerate() {
+        if index % 100 == 0 {
+            eprintln!("Registry render: {index}/{} keys complete; next {}", TEMPLATES.len(), info.key);
+        }
         for look in ["modern", "classic"] {
             let mut doc = crate::gfx::templates::build_in(info.key, look).unwrap();
             assert_eq!(doc.template.as_deref(), Some(info.key));
@@ -295,6 +299,7 @@ fn registry_builds_unique_templates_and_renders_both_looks() {
             }
         }
     }
+    eprintln!("Registry render complete: {} keys in both looks", TEMPLATES.len());
     assert!(build("not_a_set").is_none());
 }
 
@@ -399,13 +404,9 @@ fn qa_reference_graphics() {
     std::fs::copy(&fixture_path, media.join("sets-qa-image.png")).unwrap();
     let settings = Settings::default();
     let data = WxSnapshot::default();
+    let selected_keys=super::qa_selection::selected();
     for info in TEMPLATES {
-        if std::env::var("CWX_QA_SET_KEYS")
-            .ok()
-            .is_some_and(|keys| !keys.split(',').any(|key| key.trim() == info.key))
-        {
-            continue;
-        }
+        if selected_keys.as_ref().is_some_and(|keys| !keys.contains(info.key)) { continue; }
         for look in ["modern", "classic"] {
             for fixture in ["sample", "unavailable"] {
                 let mut doc = crate::gfx::templates::build_in(info.key, look).unwrap();

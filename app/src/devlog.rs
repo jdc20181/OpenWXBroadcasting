@@ -165,6 +165,12 @@ pub fn relay_fallback(direct_url: &str, relay_problem: &str) {
     push(Level::Warn, "http", format!("relay {relay_problem}; read directly instead • {direct_url}"));
 }
 
+/// The relay doesn't serve a feed (it answered 4xx): logged once per feed per session, as info.
+/// The feed is read straight from its public source from then on.
+pub fn relay_refused(route: &str, example_url: &str, status: reqwest::StatusCode) {
+    push(Level::Info, "http", format!("relay doesn't serve {route} ({status}); reading it directly from now on • e.g. {example_url}"));
+}
+
 /// A request that never got a response (DNS, TLS, timeout, connection reset).
 pub fn http_unreachable(url: &str, error: &dyn std::fmt::Display) {
     push(Level::Error, "http", format!("no response • {url} • {error}"));

@@ -1,0 +1,55 @@
+# MacOS Installer
+# Builds the OpenWX .dmg on GitHub's standard Mac runner (free for public repositories).
+# Runs as part of the Release workflow, or on its own from "Run workflow" (a test build); never on commits.
+name: MacOS Installer
+
+on:
+  workflow_dispatch:
+  workflow_call: # used by release.yml
+
+permissions:
+  contents: read # builds only; never writes to the repository or its releases
+
+jobs:
+  macos-installer:
+    name: MacOS Installer
+    runs-on: macos-15 # standard runner (Apple Silicon); larger, paid runners are never used
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Install Rust
+        run: rustup toolchain install stable --profile minimal && rustup default stable
+
+      - name: Install cargo-packager
+        run: cargo install cargo-packager --locked
+
+      - name: Build the app
+        run: cargo packager --release -p openwx-broadcaster --formats app
+
+      - name: Ad-hoc sign the app (no Apple developer account; users approve it once in Privacy & Security)
+        run: |
+          for app in dist/*.app; do codesign --force --deep --sign - "$app"; done
+          ls -la dist
+
+      - name: Make the .dmg from the signed app
+        id: name
+        run: |
+          build=$(tr -d '[:space:]' < app/BUILD_NUMBER)
+          version=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
+          out="dist/OpenWXBroadcasting-MacOS-V${version}-${build}.dmg"
+          mkdir -p dmg-root
+          cp -R dist/*.app dmg-root/
+          ln -s /Applications dmg-root/Applications
+          hdiutil create -volname "OpenWX Broadcasting" -srcfolder dmg-root -ov -format UDZO "$out"
+          echo "file=$out" >> "$GITHUB_OUTPUT"
+
+      - name: Keep the installer (Actions tab, 14 days)
+        uses: actions/upload-artifact@v4
+        with:
+          name: MacOS Installer
+          path: ${{ steps.name.outputs.file }}
+          retention-days: 14
+

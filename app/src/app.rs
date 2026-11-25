@@ -2514,6 +2514,12 @@ impl AppState {
         let UpdateState::Available(manifest) = self.update.clone() else {
             return;
         };
+        if !updater::SELF_INSTALL {
+            let page = if manifest.release_page.is_empty() { format!("{}/releases", updater::DEFAULT_FEED) } else { manifest.release_page.clone() };
+            let _ = open::that(&page);
+            self.toast(ToastKind::Info, format!("Version {} is on the download page that just opened", manifest.label()));
+            return;
+        }
         let version = manifest.label();
         self.update = UpdateState::Downloading {
             version: version.clone(),

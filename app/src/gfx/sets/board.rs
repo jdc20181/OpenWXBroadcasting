@@ -11,6 +11,12 @@ use tiny_skia::{
     Color, FillRule, Mask, Paint, PathBuilder, Pixmap, PixmapPaint, Rect, Stroke, Transform,
 };
 
+// Preserve native placard sizing while scaling the complete canvas for preview/4K.
+thread_local! {static DEVICE_SCALE: std::cell::Cell<f32> = const {std::cell::Cell::new(1.)};}
+struct BoardDeviceScale(f32);
+impl BoardDeviceScale {fn new(value:f32)->Self {Self(DEVICE_SCALE.with(|s|s.replace(value)))}}
+impl Drop for BoardDeviceScale {fn drop(&mut self){DEVICE_SCALE.with(|s|s.set(self.0));}}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum Layout {
     Compare,
@@ -300,13 +306,24 @@ fn words(
     c: &str,
     align: Align,
 ) {
-    let st = TextStyle {
+    let mut st = TextStyle {
         family: font.into(),
         weight: Weight::SemiBold,
         size,
         color: color(c),
         letter_spacing: 0.,
     };
+    // The shared text fitter has an 8px native floor. Scale that floor too,
+    // otherwise preview labels stop shrinking before their boxes fit.
+    let device_scale=DEVICE_SCALE.with(|s|s.get());
+    for _ in 0..24 {
+        let lines=crate::gfx::text::wrap(text,&st,b.w);
+        let widest=lines.iter().map(|line|measure(line,&st)).fold(0.,f32::max);
+        let (ascent,descent)=crate::gfx::text::line_metrics(&st);
+        let block=(ascent+descent)*1.08*lines.len() as f32;
+        if (widest<=b.w+0.5*device_scale && block<=b.h+0.5*device_scale)||st.size<=8.*device_scale {break;}
+        st.size*=0.92;
+    }
     draw_text_box(
         pm,
         g,
@@ -316,7 +333,7 @@ fn words(
         align,
         true,
         true,
-        true,
+        false,
         false,
         1.,
     );
@@ -636,14 +653,11 @@ fn map_impl(
     use_cache: bool,
 ) -> Option<Pixmap> {
     let all = crate::map::boundaries::counties_named();
-    let width_base = if width < 600 && height > width {
-        400.
-    } else {
-        850.
-    };
-    let u = (width as f32 / width_base)
-        .min(height as f32 / 475.)
-        .clamp(0.8, 1.3);
+    let device_scale=DEVICE_SCALE.with(|s|s.get());
+    let native_width=width as f32/device_scale;
+    let native_height=height as f32/device_scale;
+    let width_base = if native_width < 600. && native_height > native_width {400.}else{850.};
+    let u=(native_width/width_base).min(native_height/475.).clamp(0.8,1.3)*device_scale;
     let reserve = !panel.available();
     let reserve_px = if reserve { 52. * u } else { 0. };
     let geometry = all.as_ref().and_then(|all| {
@@ -1774,6 +1788,7 @@ pub(super) fn draw(
         unavailable.scope.states.clear();
         unavailable
     });
+    let _device_scale=BoardDeviceScale::new(local.sx.abs().max(0.0001));
     let legend = bands(&scene);
     let (dw, dh) = (
         (w * local.sx.abs()).round().clamp(1., 4096.) as u32,

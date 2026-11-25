@@ -186,7 +186,8 @@ fn render_scene(pm: &mut Pixmap, glyphs: &mut GlyphCache, font: &str, scene: &Sc
         |b, &(lon, lat)| [b[0].min(lon), b[1].min(lat), b[2].max(lon), b[3].max(lat)],
     );
     let available = panel.counties.as_ref();
-    let has_values = available.is_some_and(|m| counties.iter().any(|c| m.contains_key(&c.fips)));
+    let has_values = available.is_some_and(|m| counties.iter().any(|c| m.contains_key(&c.fips)))
+        || panel.zones.as_ref().is_some_and(|zones| !zones.is_empty());
     let map_x = 4. * scale;
     let map_y = 58. * scale;
     let map_w = (map_portion - 8. * scale).max(1.);
@@ -232,6 +233,17 @@ fn render_scene(pm: &mut Pixmap, glyphs: &mut GlyphCache, font: &str, scene: &Sc
             Transform::identity(),
             None,
         );
+    }
+    if let Some(zones)=&panel.zones {
+        // Supplied polygons retain their actual shape; clip once to the county union.
+        if let Some(mut clip)=tiny_skia::Mask::new(pm.width(),pm.height()) {
+            for path in paths.iter().flatten(){clip.fill_path(path,FillRule::EvenOdd,true,Transform::identity());}
+            for zone in zones {
+                if let (Some(path),Some(band))=(county_path(std::slice::from_ref(&zone.ring),fit),scene.legend.get(zone.category)) {
+                    pm.fill_path(&path,&paint(&band.color),FillRule::EvenOdd,Transform::identity(),Some(&clip));
+                }
+            }
+        }
     }
     let edge = Stroke {
         width: 0.8 * scale,
@@ -1001,6 +1013,20 @@ pub(super) fn draw(
 mod tests {
     use super::*;
     use crate::gfx::sets::board::{Band, Scope};
+
+    #[test]
+    fn polygon_overlay_draws_supplied_fill_and_preserves_transparent_corners() {
+        let all=crate::map::boundaries::counties_named().expect("county geometry");
+        let county=all.iter().find(|c|c.state=="18" && !c.rings.is_empty()).unwrap();
+        let b=county.rings.iter().flatten().fold([f64::MAX,f64::MAX,f64::MIN,f64::MIN],|b,p|[b[0].min(p.0),b[1].min(p.1),b[2].max(p.0),b[3].max(p.1)]);
+        let mut scene=board::empty(Layout::Single);scene.scope.county=Some(county.fips.clone());
+        scene.legend=vec![Band{label:"Sample polygon".into(),color:"#FF0000".into()}];
+        scene.panels[0].counties=None;scene.panels[0].zones=Some(vec![board::Zone{category:0,ring:vec![(b[0]-1.,b[1]-1.),(b[2]+1.,b[1]-1.),(b[2]+1.,b[3]+1.),(b[0]-1.,b[3]+1.)],label:String::new(),label_at:None}]);
+        let mut pm=Pixmap::new(800,360).unwrap();render_scene(&mut pm,&mut GlyphCache::default(),"sans",&scene);
+        assert!(pm.pixels().iter().filter(|p|p.red()==255 && p.green()==0 && p.blue()==0 && p.alpha()==255).count()>1000,"supplied polygon fill must render, not an unavailable map");
+        assert_eq!(pm.pixel(0,0).unwrap().alpha(),0);
+        assert_eq!(pm.pixel(799,359).unwrap().alpha(),0);
+    }
 
     #[test]
     fn county_overlay_preserves_transparent_underlay() {

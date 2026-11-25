@@ -397,14 +397,21 @@ pub fn meter() -> Meter {
 }
 
 /// Start listening to an input device (empty = default) on its own thread. Re-calling with a new
-/// name switches devices. `duck_db`: duck the soundtrack when the input is louder than this.
-pub fn start_input(name: &str, duck_db: Option<f32>) {
+/// name switches devices. `None` = off: any open input is closed and nothing is opened.
+/// `duck_db`: duck the soundtrack when the input is louder than this.
+pub fn start_input(name: Option<&str>, duck_db: Option<f32>) {
     static CURRENT: OnceLock<Mutex<Option<Sender<()>>>> = OnceLock::new();
     let slot = CURRENT.get_or_init(|| Mutex::new(None));
     if let Ok(mut s) = slot.lock() {
         if let Some(stop) = s.take() {
             let _ = stop.send(());
         }
+        let Some(name) = name else {
+            if let Ok(mut st) = input_state().lock() {
+                st.meter = Meter::default();
+            }
+            return;
+        };
         let (tx, rx) = mpsc::channel::<()>();
         *s = Some(tx);
         let name = name.to_string();

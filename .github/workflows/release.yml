@@ -1,0 +1,129 @@
+# Release
+# Builds the Windows, Linux and macOS installers on GitHub's standard runners (free for public
+# repositories), signs the Windows installer for the in-app updater, writes latest.json, and creates a
+# DRAFT release with everything attached. Nobody sees the draft until the owner presses Publish.
+#
+# Start it by pushing a version tag that matches Cargo.toml (e.g. `0.1.3`), or from the Actions tab
+# with "Run workflow". Needs the repository secret OPENWX_UPDATE_KEY: the contents of
+# openwx-broadcaster.key (installer/README.md says how).
+name: Release
+
+on:
+  push:
+    tags: ["[0-9]+.[0-9]+.[0-9]+*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read # only the final step may write, and only to create the draft release
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  windows:
+    name: Windows Installer
+    runs-on: windows-2025 # standard runner; larger, paid runners are never used
+    timeout-minutes: 180
+    defaults:
+      run:
+        shell: bash
+    outputs:
+      version: ${{ steps.name.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Version and build number
+        id: name
+        run: |
+          version=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
+          build=$(tr -d '[:space:]' < app/BUILD_NUMBER)
+          if [ "${GITHUB_REF_TYPE}" = "tag" ] && [ "${GITHUB_REF_NAME}" != "${version}" ]; then
+            echo "::error::Tag ${GITHUB_REF_NAME} doesn't match the version in Cargo.toml (${version})"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "file=dist/OpenWXBroadcasting-Windows-V${version}-${build}.exe" >> "$GITHUB_OUTPUT"
+
+      - name: Install Rust
+        run: rustup toolchain install stable --profile minimal && rustup default stable
+
+      - name: Install cargo-packager
+        run: cargo install cargo-packager --locked
+
+      - name: Build the installer
+        run: cargo packager --release -p openwx-broadcaster --formats nsis
+
+      - name: Name and sign it, and write latest.json
+        env:
+          UPDATE_KEY: ${{ secrets.OPENWX_UPDATE_KEY }}
+        run: |
+          version="${{ steps.name.outputs.version }}"
+          out="${{ steps.name.outputs.file }}"
+          mv "dist/openwx-broadcaster_${version}_x64-setup.exe" "$out"
+          if [ -z "$UPDATE_KEY" ]; then
+            echo "::error::The OPENWX_UPDATE_KEY secret is missing; see installer/README.md"
+            exit 1
+          fi
+          cargo build --locked --release -p openwx-broadcaster --bin openwx-release
+          key="$RUNNER_TEMP/openwx-update.key"
+          printf '%s' "$UPDATE_KEY" > "$key"
+          OPENWX_SIGNING_KEY="$key" ./target/release/openwx-release.exe "$out" "$version"
+          rm -f "$key"
+          ls -la dist
+
+      - name: Keep the installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: Windows Installer
+          path: |
+            ${{ steps.name.outputs.file }}
+            ${{ steps.name.outputs.file }}.sig
+            dist/latest.json
+          retention-days: 14
+
+  linux:
+    name: Linux
+    uses: ./.github/workflows/linux-installer.yml
+
+  macos:
+    name: MacOS
+    uses: ./.github/workflows/macos-installer.yml
+
+  release:
+    name: Draft release
+    needs: [windows, linux, macos]
+    # Windows carries the update feed, so it must succeed; Linux or macOS failing leaves them out.
+    if: ${{ !cancelled() && needs.windows.result == 'success' }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write # creates the draft release; never pushes code
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: files
+          merge-multiple: true
+
+      - name: Create the draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.windows.outputs.version }}
+          LINUX: ${{ needs.linux.result }}
+          MACOS: ${{ needs.macos.result }}
+        run: |
+          ls -la files
+          jq -r .notes files/latest.json > notes.md
+          missing=""
+          [ "$LINUX" = "success" ] || missing="$missing Linux"
+          [ "$MACOS" = "success" ] || missing="$missing macOS"
+          if [ -n "$missing" ]; then
+            printf '\n\n_Not in this release (build failed):%s_\n' "$missing" >> notes.md
+          fi
+          gh release create "$VERSION" files/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --draft --prerelease \
+            --title "OpenWX Broadcasting $VERSION" \
+            --notes-file notes.md

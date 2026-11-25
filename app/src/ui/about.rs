@@ -159,7 +159,7 @@ impl AboutView {
                         this.app.update(cx, |s, cx| s.check_updates(true, cx));
                     })))
                     .when(available, |d| {
-                        d.child(button_primary("download", "Download & verify").on_click(cx.listener(|this, _, _, cx| {
+                        d.child(button_primary("download", if crate::updater::SELF_INSTALL { "Download & verify" } else { "Open download page" }).on_click(cx.listener(|this, _, _, cx| {
                             this.app.update(cx, |s, cx| s.download_update(cx));
                         })))
                         .child(button("skip", "Skip this version").on_click(cx.listener(|this, _, _, cx| {
@@ -180,7 +180,7 @@ impl AboutView {
                     }),
             )
             .child(muted(format!("Feed: {feed}")))
-            .child(muted("Installers are verified with the OpenWX signing key and SHA-256 before they run."))
+            .when(crate::updater::SELF_INSTALL, |d| d.child(muted("Installers are verified with the OpenWX signing key and SHA-256 before they run.")))
             .when(older.len() > 1, |d| {
                 // The newest staged installer is the current version; the next one is the rollback.
                 let previous = older[1].clone();

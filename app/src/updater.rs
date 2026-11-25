@@ -11,7 +11,7 @@
 //!   "pub_date": "2026-11-20T12:00:00Z",
 //!   "notes": "## 0.2.0\n- What changed…",
 //!   "platforms": {
-//!     "windows-x86_64": { "url": "https://…/OpenWXBroadcasting_0.2.0_x64-setup.exe",
+//!     "windows-x86_64": { "url": "https://…/OpenWXBroadcasting-Windows-V0.2.0-112420261.exe",
 //!                          "sha256": "…", "signature": "<minisign signature, base64>" }
 //!   }
 //! }
@@ -36,7 +36,10 @@ use crate::{
 /// with the maintainer in ~/.tauri/openwx-broadcaster.key).
 pub const UPDATE_PUBLIC_KEY: &str = "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEQzM0MwMDAzNUEzMDVCRjMKUldUeld6QmFBd0E4MHhITXNJQ0JpamFvSjFsNTExcUFOcUt2QXdOUFM4SHlOSk9MNmVzbDlEL0kK";
 
-pub const PLATFORM: &str = "windows-x86_64";
+/// This build's entry in latest.json. Only Windows installs updates itself; on Linux and macOS
+/// the app says a new version is out and opens its release page.
+pub const PLATFORM: &str = if cfg!(windows) { "windows-x86_64" } else if cfg!(target_os = "macos") { "darwin-aarch64" } else { "linux-x86_64" };
+pub const SELF_INSTALL: bool = cfg!(windows);
 
 /// Where OpenWX releases are published.
 pub const DEFAULT_FEED: &str = "https://github.com/jdc20181/OpenWXBroadcasting";
@@ -124,6 +127,7 @@ async fn github_manifest(owner: &str, repo: &str, beta: bool) -> Result<UpdateMa
             asset.url = found.browser_download_url.clone();
         }
     }
+    manifest.release_page = release.html_url.clone();
     Ok(manifest)
 }
 
@@ -148,6 +152,9 @@ pub struct UpdateManifest {
     pub notes: String,
     #[serde(default)]
     pub platforms: std::collections::HashMap<String, PlatformAsset>,
+    /// The release's GitHub page (filled in after reading; not part of latest.json).
+    #[serde(skip)]
+    pub release_page: String,
 }
 
 #[derive(Clone, Debug)]
@@ -210,7 +217,7 @@ pub async fn check(feed: String, beta: bool) -> Result<Option<UpdateManifest>> {
         Some((owner, repo)) => github_manifest(&owner, &repo, beta).await?,
         None => json_feed(&feed).await?,
     };
-    if is_newer(&manifest.version, manifest.build, APP_VERSION, APP_BUILD) && manifest.platforms.contains_key(PLATFORM) {
+    if is_newer(&manifest.version, manifest.build, APP_VERSION, APP_BUILD) && (manifest.platforms.contains_key(PLATFORM) || !SELF_INSTALL) {
         Ok(Some(manifest))
     } else {
         Ok(None)

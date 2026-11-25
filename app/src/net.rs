@@ -136,10 +136,25 @@ pub async fn broadcaster_product_optional(path: &str, legacy_upstream: &str, tim
         return get_logged(legacy_upstream, timeout).await;
     }
     let url = format!("{base}/api/weatherbroadcaster/{path}");
-    let response = http().get(&url).header("Accept", "*/*").timeout(timeout).send().await?;
-    if response.status() == reqwest::StatusCode::NOT_FOUND {
-        return get_logged(legacy_upstream, timeout).await;
+    match http().get(&url).header("Accept", "*/*").timeout(timeout).send().await {
+        // 404: an older relay without the route. 5xx: the relay or its gateway failed. Either
+        // way the source is public, so read it directly (like the NOAA feeds).
+        Ok(response) if response.status() == reqwest::StatusCode::NOT_FOUND => get_logged(legacy_upstream, timeout).await,
+        Ok(response) if response.status().is_server_error() => {
+            crate::devlog::relay_fallback(legacy_upstream, &format!("route {path} answered {}", response.status()));
+            get_direct(legacy_upstream, timeout).await
+        }
+        Ok(response) => check_level(response, true).await,
+        Err(error) => {
+            crate::devlog::relay_fallback(legacy_upstream, &format!("route {path} didn't answer ({error})"));
+            get_direct(legacy_upstream, timeout).await
+        }
     }
+}
+
+/// GET straight from the source (never through the relay), with errors logged as optional.
+async fn get_direct(url: &str, timeout: Duration) -> Result<reqwest::Response> {
+    let response = http().get(url).header("Accept", "*/*").timeout(timeout).send().await?;
     check_level(response, true).await
 }
 
@@ -240,6 +255,24 @@ fn too_large_for_relay(url: &str) -> bool {
     }
 }
 
+/// The kind of feed a URL is, for remembering which ones the relay refuses: host, first path
+/// segment and last path segment ("api.weather.gov /stations …/latest"), so every station or
+/// map tile of one feed counts as one.
+fn relay_route_key(url: &str) -> String {
+    let Ok(parsed) = reqwest::Url::parse(url) else { return url.to_owned() };
+    let mut segments = parsed.path_segments().into_iter().flatten().filter(|s| !s.is_empty());
+    let first = segments.next().unwrap_or_default().to_owned();
+    let last = segments.last().unwrap_or_default().to_owned();
+    format!("{} /{first} …/{last}", parsed.host_str().unwrap_or_default())
+}
+
+/// Feeds the relay refused (4xx other than 429) this session. They are read directly from the
+/// public source from then on, without asking the relay again or logging a warning each time.
+fn relay_refused() -> &'static std::sync::Mutex<std::collections::HashSet<String>> {
+    static REFUSED: OnceLock<std::sync::Mutex<std::collections::HashSet<String>>> = OnceLock::new();
+    REFUSED.get_or_init(Default::default)
+}
+
 /// GET with failures logged to the developer log.
 pub async fn get_logged(url: &str, timeout: Duration) -> Result<reqwest::Response> {
     static METEO_BACKOFF: AtomicI64 = AtomicI64::new(0);
@@ -250,7 +283,9 @@ pub async fn get_logged(url: &str, timeout: Duration) -> Result<reqwest::Respons
         return Err(RateLimit { host: host_of(url), retry_after: Duration::from_secs(remaining as u64) }.into());
     }
     let base = api_base().read().map(|b| b.clone()).unwrap_or_default();
-    let target = if too_large_for_relay(url) { url.to_owned() } else { proxy_url(&base, url) };
+    let route = relay_route_key(url);
+    let refused_before = !meteo && relay_refused().lock().is_ok_and(|r| r.contains(&route));
+    let target = if too_large_for_relay(url) || refused_before { url.to_owned() } else { proxy_url(&base, url) };
     let started = std::time::Instant::now();
     let send = |address: &str| http().get(address).header("Accept", "*/*").timeout(timeout).send();
     // Public NOAA/NWS feeds go through the relay, but the source is public: when the relay can't
@@ -261,10 +296,17 @@ pub async fn get_logged(url: &str, timeout: Duration) -> Result<reqwest::Respons
         // 5xx: the relay or its gateway failed. 4xx (not 429): the relay refused the path, e.g.
         // 400 "Unsupported weather feed path" for a NOAA endpoint its allow-list doesn't have yet.
         Ok(response)
-            if fallback
-                && (response.status().is_server_error()
-                    || (response.status().is_client_error() && response.status() != reqwest::StatusCode::TOO_MANY_REQUESTS)) =>
+            if fallback && response.status().is_client_error() && response.status() != reqwest::StatusCode::TOO_MANY_REQUESTS =>
         {
+            // A path the relay doesn't serve stays unserved this session: remember it and say so
+            // once, then read that feed directly without asking the relay first.
+            let first_time = relay_refused().lock().is_ok_and(|mut r| r.insert(route.clone()));
+            if first_time {
+                crate::devlog::relay_refused(&route, url, response.status());
+            }
+            send(url).await
+        }
+        Ok(response) if fallback && response.status().is_server_error() => {
             crate::devlog::relay_fallback(url, &format!("answered {}", response.status()));
             send(url).await
         }
@@ -283,7 +325,14 @@ pub async fn get_logged(url: &str, timeout: Duration) -> Result<reqwest::Respons
                     METEO_BACKOFF.fetch_max(chrono::Utc::now().timestamp() + seconds, Ordering::Relaxed);
                 }
             }
-            check(response).await
+            // A station with no recent report answers 404 for its latest observation: that's a
+            // normal "nothing to show" (the ticker skips it), not a fault worth a warning.
+            if response.status() == reqwest::StatusCode::NOT_FOUND && url.ends_with("/observations/latest") {
+                log::debug!("no recent observation: {url}");
+                Err(anyhow!("404 from {url}"))
+            } else {
+                check(response).await
+            }
         }
         Err(e) => Err(e.into()),
     };
@@ -476,4 +525,23 @@ pub async fn test_connection(api_base: String) -> Result<String> {
         "Radar proxy OK in {ms} ms - {} frames, latest {latest}",
         index.radar.past.len()
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Every station, and every HeatRisk sample, counts as one feed: one log line, not hundreds.
+    #[test]
+    fn relay_refusals_group_by_feed() {
+        let a = relay_route_key("https://api.weather.gov/stations/KHNB/observations/latest");
+        let b = relay_route_key("https://api.weather.gov/stations/KEVV/observations/latest");
+        assert_eq!(a, b);
+        assert_eq!(a, "api.weather.gov /stations …/latest");
+        let s1 = relay_route_key("https://mapservices.weather.noaa.gov/experimental/rest/services/NWS_HeatRisk/ImageServer/getSamples?geometry=1");
+        let s2 = relay_route_key("https://mapservices.weather.noaa.gov/experimental/rest/services/NWS_HeatRisk/ImageServer/getSamples?geometry=2");
+        let q = relay_route_key("https://mapservices.weather.noaa.gov/experimental/rest/services/NWS_HeatRisk/ImageServer/query?f=json");
+        assert_eq!(s1, s2);
+        assert_ne!(s1, q);
+    }
 }

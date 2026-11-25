@@ -13,7 +13,7 @@ fn diagnostic_style(metric: &str) -> Option<(String, Palette, Vec<Band>)> {
         "700 mb vertical motion" => ("700 mb omega • Pa/s • Negative = rising",
             ["Below -2 Pa/s", "-2 to <-1 Pa/s", "-1 to <-0.5 Pa/s", "-0.5 to <0 Pa/s", "0 to <0.5 Pa/s", "0.5 to <1 Pa/s", "1 to <2 Pa/s", "2 Pa/s and above"],
             ["#3855B8", "#387DD0", "#28B8D2", "#72C9CC", "#F3DA72", "#F5A332", "#EB5538", "#B52643"]),
-        "Visibility" => ("Visibility • mi",
+        "Visibility" | "Visibility (fog)" => ("Visibility • mi",
             ["Below 0.25 mi", "0.25 to <0.5 mi", "0.5 to <1 mi", "1 to <2 mi", "2 to <3 mi", "3 to <5 mi", "5 to <10 mi", "10 mi and above"],
             ["#9C3EC5", "#AD5DBA", "#8F78C7", "#5B92CF", "#35ABBB", "#47BA9A", "#87C863", "#CFDA74"]),
         _ => return None,

@@ -1,6 +1,6 @@
 [package]
 name = "openwx-broadcaster"
-version = "0.1.2"
+version = "0.1.3"
 edition = "2021"
 license-file = "../LICENSE"
 description = "OpenWX Broadcasting - broadcast weather radar, graphics and presentation studio for community weather stations"

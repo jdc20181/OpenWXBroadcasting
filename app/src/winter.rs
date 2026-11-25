@@ -1,6 +1,6 @@
 //! Winter Weather Studio data: saved winter maps (snow totals, ice, storm potential) for one
-//! state, with an editable legend (bands), model snowfall/ice fetched from Open-Meteo for any
-//! model, and county overrides painted by hand. Graphics draw a map through a `winter:<id>`
+//! state, with an editable legend (bands), model snowfall/ice read from NOAA's model files
+//! (HRRR or GFS), and county overrides painted by hand. Graphics draw a map through a `winter:<id>`
 //! risk-map layer, so edits here show up in every graphic that uses it.
 
 use std::{
@@ -422,10 +422,10 @@ impl WinterMap {
         match &self.grid {
             Some(g) if !g.note.is_empty() => format!("{}, {}", g.note, span(g.start, g.hours)),
             Some(g) if g.model.is_noaa() => format!("Model: NOAA {}, {}", g.model.label(), span(g.start, g.hours)),
-            Some(g) => format!("Model: {} via Open-Meteo, {}", g.model.label(), span(g.start, g.hours)),
+            Some(g) => format!("Model: NOAA {}, {}", g.model.label(), span(g.start, g.hours)),
             // Not loaded yet: credit the model that is loading, not a bare "Forecast".
             None if self.model.is_noaa() => format!("Model: NOAA {}, {}", self.model.label(), span(self.start, self.hours)),
-            None => format!("Model: {} via Open-Meteo, {}", self.model.label(), span(self.start, self.hours)),
+            None => format!("Model: NOAA GFS, {}", span(self.start, self.hours)),
         }
     }
 
@@ -698,8 +698,8 @@ pub fn region_bbox(state: &str, focus: Option<Focus>) -> Option<(f64, f64, f64, 
     (b.0 < b.2).then_some(b)
 }
 
-/// Snowfall (10:1, inches) or freezing-rain totals for the next `hours` over the state. GFS is
-/// read from NOAA's GRIB files on a dense grid; the other models come from Open-Meteo.
+/// Snowfall (10:1, inches) or freezing-rain totals for the next `hours` over the state, read
+/// from NOAA's GRIB files on a dense grid (HRRR where it covers the area, else GFS).
 pub async fn fetch(state: String, focus: Option<Focus>, kind: WinterKind, model: GridModel, start: u32, hours: u32) -> Result<WinterGrid> {
     // On a first run the county outlines are still downloading when Winter Studio opens: wait
     // for them (up to 2 minutes) instead of failing until "Reload model" is pressed.
@@ -719,75 +719,25 @@ pub async fn fetch(state: String, focus: Option<Focus>, kind: WinterKind, model:
     let reach = model.max_hours().max(6);
     let start = start.min(reach.saturating_sub(6));
     let hours = hours.clamp(6, (reach - start).max(6));
-    if model.is_noaa() && crate::grid::noaa_fits(model, (north, south, west, east)) {
-        match fetch_noaa((north, south, west, east), aspect, kind, model, start, hours).await {
-            Ok(grid) => return Ok(grid),
-            // HRRR from NOAA needs the updated relay; until then HRRR uses its previous path.
-            Err(e) if model == GridModel::Hrrr => log::warn!("NOAA HRRR winter grid: {e:#}; using the previous HRRR source"),
-            Err(e) => return Err(e),
+    // Winter maps read NOAA's own model files only (no Open-Meteo: its free tier answered 429 and
+    // blanked the maps). HRRR where it covers the area, else GFS; other models show GFS and say so.
+    let bounds = (north, south, west, east);
+    let noaa_model = if model == GridModel::Hrrr && crate::grid::noaa_fits(model, bounds) { GridModel::Hrrr } else { GridModel::Gfs };
+    let substitute = |mut grid: WinterGrid, used: GridModel| {
+        if used != model {
+            grid.note = format!("{} shown: {} isn't read from NOAA here", used.label(), model.label());
         }
-    }
-    let target = 180.0_f64;
-    let ny = ((target / aspect).sqrt().round() as usize).clamp(6, 24);
-    let nx = ((target / ny as f64).round() as usize).clamp(6, 30);
-    let mut points = Vec::with_capacity(nx * ny);
-    for j in 0..ny {
-        for i in 0..nx {
-            points.push((north - (north - south) * j as f64 / (ny - 1) as f64, west + (east - west) * i as f64 / (nx - 1) as f64));
-        }
-    }
-    let hourly = if kind.uses_ice() { "precipitation,weather_code" } else if kind.with_ice() { "snowfall,precipitation,weather_code" } else { "snowfall" };
-    let total = start + hours;
-    let mut tasks = Vec::new();
-    for chunk in points.chunks(100) {
-        let lats = chunk.iter().map(|p| format!("{:.3}", p.0)).collect::<Vec<_>>().join(",");
-        let lons = chunk.iter().map(|p| format!("{:.3}", p.1)).collect::<Vec<_>>().join(",");
-        let url = format!(
-            "https://api.open-meteo.com/v1/forecast?latitude={lats}&longitude={lons}&hourly={hourly}&forecast_hours={total}&precipitation_unit=inch&timeformat=unixtime&timezone=GMT{}",
-            model.api_id_pub().map(|id| format!("&models={id}")).unwrap_or_default()
-        );
-        tasks.push(crate::net::spawn(async move {
-            let response = crate::net::get_logged(&url, std::time::Duration::from_secs(40)).await?;
-            if response.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
-                return Err(anyhow!("Open-Meteo daily limit reached (429), try again later"));
-            }
-            Ok::<serde_json::Value, anyhow::Error>(response.json().await?)
-        }));
-    }
-    let mut locations = Vec::new();
-    for t in tasks {
-        match t.await.map_err(|e| anyhow!("winter fetch: {e}"))?? {
-            serde_json::Value::Array(items) => locations.extend(items),
-            other => locations.push(other),
-        }
-    }
-    if locations.len() != points.len() {
-        return Err(anyhow!("Open-Meteo returned {} of {} points", locations.len(), points.len()));
-    }
-    // Hours before the window's start are dropped.
-    let nums = |v: &serde_json::Value, key: &str| -> Vec<f32> {
-        v["hourly"][key].as_array().map(|a| a.iter().skip(start as usize).map(|x| x.as_f64().unwrap_or(0.0) as f32).collect()).unwrap_or_default()
+        grid
     };
-    // Freezing rain / drizzle hours (WMO 56, 57, 66, 67): their liquid becomes ice.
-    let ice_of = |loc: &serde_json::Value| -> f32 {
-        let p = nums(loc, "precipitation");
-        let w = nums(loc, "weather_code");
-        p.iter().zip(w.iter()).filter(|(_, c)| matches!(**c as i32, 56 | 57 | 66 | 67)).map(|(p, _)| *p).sum()
-    };
-    let values = locations
-        .iter()
-        .map(|loc| {
-            if kind.uses_ice() {
-                ice_of(loc)
-            } else {
-                // Open-Meteo's snowfall is at 7:1 (inches with precipitation_unit=inch); scale to
-                // the 10:1 the NOAA path and broadcast totals use.
-                nums(loc, "snowfall").iter().sum::<f32>() * 10.0 / 7.0
-            }
-        })
-        .collect();
-    let ice = if kind.with_ice() { locations.iter().map(ice_of).collect() } else { Vec::new() };
-    Ok(WinterGrid { model, start, hours, fetched_at: chrono::Utc::now().timestamp(), north, south, west, east, nx, ny, values, ice, note: if model.is_noaa() { format!("Model: {} via Open-Meteo", model.label()) } else { String::new() } })
+    match fetch_noaa(bounds, aspect, kind, noaa_model, start, hours).await {
+        Ok(grid) => return Ok(substitute(grid, noaa_model)),
+        Err(e) if noaa_model == GridModel::Hrrr => {
+            log::warn!("NOAA HRRR winter grid: {e:#}; using NOAA GFS");
+            let grid = fetch_noaa(bounds, aspect, kind, GridModel::Gfs, start, hours.min(GridModel::Gfs.max_hours())).await?;
+            return Ok(substitute(grid, GridModel::Gfs));
+        }
+        Err(e) => return Err(e),
+    }
 }
 
 /// The NOAA path of [`fetch`]: a dense GFS grid over the state (NOAA has no per-point cost).

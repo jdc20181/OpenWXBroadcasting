@@ -645,7 +645,7 @@ impl SettingsView {
                         col()
                             .gap(px(4.))
                             .child(row().h(px(12.)).w_full().rounded(px(3.)).bg(c(0x1A2030)).child(div().h_full().w(relative(fill)).rounded(px(3.)).bg(c(if m.peak_db > -3.0 { 0xE5383B } else if m.peak_db > -12.0 { 0xE0A030 } else { 0x3DD68C }))))
-                            .child(muted(if m.active { format!("Input peak {:.0} dBFS • loudness {:.0} LUFS", m.peak_db, m.short_lufs) } else { "Input meter: no input yet".to_string() }))
+                            .child(muted(if m.active { format!("Input peak {:.0} dBFS • loudness {:.0} LUFS", m.peak_db, m.short_lufs) } else if !d.audio_input_on { "Microphone off".to_string() } else { "Input meter: no input yet".to_string() }))
                     })
                     .child(muted("Soundtrack and cue output"))
                     .child(row().flex_wrap().gap(px(3.)).children(std::iter::once(String::new()).chain(crate::audio::output_devices()).enumerate().map(|(i, n)| {
@@ -666,11 +666,17 @@ impl SettingsView {
                         }))
                     }).collect::<Vec<_>>()))
                     .child(muted("Microphone / input (meters, voice-over, ducking)"))
-                    .child(row().flex_wrap().gap(px(3.)).children(std::iter::once(String::new()).chain(crate::audio::input_devices()).enumerate().map(|(i, n)| {
+                    .child(row().flex_wrap().gap(px(3.))
+                        .child(chip("aud-in-off", "Off (not listening)", !d.audio_input_on).on_click(cx.listener(|this, _, _, cx| {
+                            this.draft.audio_input_on = false;
+                            cx.notify();
+                        })))
+                        .children(std::iter::once(String::new()).chain(crate::audio::input_devices()).enumerate().map(|(i, n)| {
                         let label = if n.is_empty() { "Default".to_string() } else { n.clone() };
-                        let on = d.audio_input_device == n;
+                        let on = d.audio_input_on && d.audio_input_device == n;
                         chip(("aud-in", i), label, on).on_click(cx.listener(move |this, _, _, cx| {
                             this.draft.audio_input_device = n.clone();
+                            this.draft.audio_input_on = true;
                             cx.notify();
                         }))
                     }).collect::<Vec<_>>()))
@@ -712,6 +718,11 @@ impl SettingsView {
                                             }
                                             Err(e) => s.toast(ToastKind::Error, format!("Recording: {e}")),
                                         }
+                                        cx.notify();
+                                    });
+                                } else if !this.app.read(cx).settings.audio_input_on {
+                                    this.app.update(cx, |s, cx| {
+                                        s.toast(ToastKind::Info, "Pick a microphone above first");
                                         cx.notify();
                                     });
                                 } else {

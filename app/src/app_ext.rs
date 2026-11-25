@@ -386,12 +386,12 @@ impl AppState {
                 self.compositor.update(|p| p.data = snapshot);
             }
         }
-        let audio_key = format!("{}|{}|{}|{}", self.settings.audio_program_device, self.settings.audio_alert_device, self.settings.audio_input_device, self.settings.duck_threshold_db);
+        let audio_key = format!("{}|{}|{}|{}|{}", self.settings.audio_program_device, self.settings.audio_alert_device, self.settings.audio_input_device, self.settings.audio_input_on, self.settings.duck_threshold_db);
         if audio_key != self.ext.audio_key {
             self.ext.audio_key = audio_key;
             crate::audio::set_devices(&self.settings.audio_program_device, &self.settings.audio_alert_device);
             let duck = (self.settings.duck_threshold_db < 0.0).then_some(self.settings.duck_threshold_db);
-            crate::audio::start_input(&self.settings.audio_input_device, duck);
+            crate::audio::start_input(self.settings.audio_input_on.then_some(self.settings.audio_input_device.as_str()), duck);
         }
         if self.ext.ensemble_at.map(|t| t.elapsed() >= Duration::from_secs(3 * 3600)).unwrap_or(true) {
             self.ext.ensemble_at = Some(Instant::now());

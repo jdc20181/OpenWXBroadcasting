@@ -30,7 +30,9 @@ const PALETTE: [&str; 14] = [
 const HOURS: [u32; 6] = [12, 24, 48, 72, 120, 168];
 
 /// Models offered side by side in "Compare models" (CWXB-83 item 3).
-const COMPARE: [GridModel; 5] = [GridModel::Gfs, GridModel::Nam, GridModel::Hrrr, GridModel::Nbm, GridModel::Ecmwf];
+/// The models Winter Studio reads from NOAA itself (NAM, NBM and ECMWF came from Open-Meteo,
+/// which is no longer used; they would only repeat GFS).
+const COMPARE: [GridModel; 2] = [GridModel::Gfs, GridModel::Hrrr];
 
 /// Ready-made zone names (the owner's reference: "Flakes possible", "Accumulation possible").
 const ZONE_LABELS: [&str; 5] = ["Flakes possible", "Accumulation possible", "Heavy snow possible", "Icing possible", "Mixed precipitation"];

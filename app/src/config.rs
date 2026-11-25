@@ -47,6 +47,17 @@ pub fn parse_dated_build(build: u32) -> Option<(u64, u64, u64, u64)> {
 }
 
 #[cfg(test)]
+mod audio_input_tests {
+    /// The microphone is never opened unless the user picks one (new installs and old settings).
+    #[test]
+    fn microphone_off_by_default() {
+        assert!(!super::Settings::default().audio_input_on);
+        let old: super::Settings = serde_json::from_str(r#"{"audio_input_device": ""}"#).unwrap();
+        assert!(!old.audio_input_on);
+    }
+}
+
+#[cfg(test)]
 mod build_order_tests {
     use super::build_order;
 
@@ -497,6 +508,9 @@ pub struct Settings {
     pub audio_program_device: String,
     pub audio_alert_device: String,
     pub audio_input_device: String,
+    /// Listen to the microphone/input at all. Off by default: nothing opens the input until
+    /// the user picks one in Settings > Audio.
+    pub audio_input_on: bool,
     /// Media file played for warning alerts instead of the system sound ("" = system sound).
     pub alert_sound_file: String,
     /// Soundtrack volume (0-1) and delay to line up with the video path, ms.
@@ -803,6 +817,7 @@ impl Default for Settings {
             audio_program_device: String::new(),
             audio_alert_device: String::new(),
             audio_input_device: String::new(),
+            audio_input_on: false,
             alert_sound_file: String::new(),
             graphic_volume: 0.8,
             presentation_muted: false,
